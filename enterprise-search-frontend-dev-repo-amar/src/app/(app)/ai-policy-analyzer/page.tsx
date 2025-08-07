@@ -42,7 +42,7 @@ export default function AIPolicyAnalyzer() {
       description: "Access a comprehensive repository of policy templates, best practices, and regulatory guidelines.",
       icon: BookOpen,
       color: "bg-green-500", 
-      href: "/knowledge",
+      href: "/learn",
       features: [
         "Policy templates",
         "Best practices",
