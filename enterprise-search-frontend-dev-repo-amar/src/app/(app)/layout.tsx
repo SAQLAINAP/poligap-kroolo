@@ -21,7 +21,7 @@ export default async function AppPagesLayout({
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <AppSidebar />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto p-0">{children}</main>
       </div>
     </div>
   );

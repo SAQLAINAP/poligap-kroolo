@@ -2,20 +2,14 @@
 
 import * as React from "react";
 import {
-  // LayoutDashboard,
-  // MessageCircle,
-  // History,
-  BookOpen,
-  Users,
-  // Settings,
-  // Plus,
   ChevronLeft,
-  Home,
-  User,
-  Brain,
+  CheckSquare,
+  MessageCircle,
+  Shield,
+  FileText,
+  Bot,
   Settings,
-  LayoutDashboard,
-  // Brain,
+  Home,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,68 +34,46 @@ import { useCompanyStore } from "@/stores/company-store";
 // Define page types for type safety
 type PageType =
   | "dashboard"
-  | "search"
+  | "my-tasks"
   | "chat"
-  | "history"
-  | "knowledge"
-  | "users"
-  | "ai-policy-analyzer"
-  | "profile";
+  | "compliance-check"
+  | "contract-review"
+  | "ai-agents"
+  | "settings";
 
 const navigationItems = [
   {
-    title: "Home",
-    icon: Home,
-    page: "/search" as PageType,
-  },
-  // {
-  //   title: "Chat",
-  //   icon: MessageCircle,
-  //   page: "/chat" as PageType,
-  // },
-  // {
-  //   title: "Chat History",
-  //   icon: History,
-  //   page: "/chat-history" as PageType,
-  // },
-  {
-    title: "Knowledge",
-    icon: BookOpen,
-    page: "/knowledge" as PageType,
-  },
-  // {
-  //   title: "Knowledge Base",
-  //   icon: Brain,
-  //   page: "/knowledge-base" as PageType,
-  // },
-  // {
-  //   title: "Database",
-  //   icon: Brain,
-  //   page: "/database" as PageType,
-  // },
-  {
-    title: "Users",
-    icon: Users,
-    page: "/users" as PageType,
+    title: "My Tasks",
+    icon: CheckSquare,
+    page: "/my-tasks" as PageType,
   },
   {
-    title: "AI Policy Analyzer",
-    icon: Brain,
-    page: "/ai-policy-analyzer" as PageType,
+    title: "Chat",
+    icon: MessageCircle,
+    page: "/chat" as PageType,
   },
-  
+  {
+    title: "Compliance Check",
+    icon: Shield,
+    page: "/compliance-check" as PageType,
+  },
+  {
+    title: "Contract Review",
+    icon: FileText,
+    page: "/contract-review" as PageType,
+  },
+  {
+    title: "AI Agents",
+    icon: Bot,
+    page: "/ai-agents" as PageType,
+  },
 ];
 
 const bottomNavigationItems = [
-  // {
-  //   title: "Profile",
-  //   icon: User,
-  //   page: "/profile" as PageType,
-  // },
   {
-    title: "Dashboard",
-    icon: LayoutDashboard,
-    page: "/dashboard" as PageType,
+    title: "Settings",
+    icon: Settings,
+    page: "/settings" as PageType,
   },
 ];
 
@@ -110,7 +82,7 @@ export function AppSidebar() {
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
   const pathname = usePathname();
-  const currentPage = `/${pathname.split("/")[1]}`;
+  const currentPage = pathname ? `/${pathname.split("/")[1]}` : "/";
 
   // Get selected company role from the store
   const selectedCompany = useCompanyStore((s) => s.selectedCompany);
@@ -118,19 +90,11 @@ export function AppSidebar() {
 
   console.log("userRole =>", userRole);
 
-  // show these if the userRole is not Owner
-  const visibleNavigationItems = navigationItems.filter((item) =>
-    userRole === "Owner" || userRole === "Admin"
-      ? true
-      : ["Home", "Users", "AI Policy Analyzer"].includes(item.title)
-  );
+  // Show all navigation items for Poligap interface
+  const visibleNavigationItems = navigationItems;
 
-  // show these if the userRole is not Owner or Admin
-  const visibleBottomNavigationItems = bottomNavigationItems.filter((item) =>
-    userRole === "Owner" || userRole === "Admin"
-      ? true
-      : [""].includes(item.title)
-  );
+  // Show all bottom navigation items for Poligap interface
+  const visibleBottomNavigationItems = bottomNavigationItems;
 
   // console.log("visibleBottomNavigationItems =>", visibleBottomNavigationItems);
 
@@ -138,33 +102,69 @@ export function AppSidebar() {
 
   const MenuItemWithTooltip = ({
     title,
-    children,
+    href,
+    icon: Icon,
+    isActive,
   }: {
     title: string;
-    children: React.ReactNode;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    isActive: boolean;
   }) => {
+    const buttonContent = (
+      <div
+        className={`text-card-foreground hover:bg-filter-menu hover:text-accent-foreground ${
+          isActive
+            ? "bg-filter-menu text-accent-foreground"
+            : ""
+        } cursor-pointer flex items-center gap-1.5 px-3 py-2 w-full rounded-md transition-colors`}
+      >
+        <div className="flex items-center justify-center w-4 h-4 flex-shrink-0">
+          <Icon className="h-5 w-5" />
+        </div>
+        <span
+          className={`font-medium text-13 transition-opacity duration-300 ${
+            sidebarCollapsed
+              ? "opacity-0 w-0 overflow-hidden"
+              : "opacity-100"
+          }`}
+        >
+          {title}
+        </span>
+      </div>
+    );
+
     if (sidebarCollapsed) {
       return (
         <Tooltip>
-          <TooltipTrigger asChild>{children}</TooltipTrigger>
+          <TooltipTrigger asChild>
+            <Link href={href} className="block">
+              {buttonContent}
+            </Link>
+          </TooltipTrigger>
           <TooltipContent side="right" align="start" className="font-normal">
             {title}
           </TooltipContent>
         </Tooltip>
       );
     }
-    return children;
+    
+    return (
+      <Link href={href} className="block">
+        {buttonContent}
+      </Link>
+    );
   };
 
   return (
-    <div className="flex h-[calc(100vh-2.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-60px)] overflow-hidden">
       <TooltipProvider delayDuration={300}>
         <SidebarProvider>
           {/* Sidebar */}
           <div
             className={`border-r border-border ${
               sidebarCollapsed ? "w-[60px]" : "w-[240px]"
-            } transition-all duration-300 flex flex-col h-[calc(100vh-2.5rem)] overflow-hidden relative group`}
+            } transition-all duration-300 flex flex-col h-[calc(100vh-60px)] overflow-hidden relative group`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
@@ -231,75 +231,33 @@ export function AppSidebar() {
 
             {/* Navigation Items */}
             <div className="flex-1 overflow-y-auto py-4">
-              <SidebarMenu className="px-2" style={{ gap: "1px" }}>
+              <div className="px-2 space-y-1">
                 {visibleNavigationItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <MenuItemWithTooltip title={item.title}>
-                      <Link href={item.page}>
-                        <SidebarMenuButton
-                          className={`text-card-foreground hover:bg-filter-menu hover:text-accent-foreground ${
-                            currentPage === item.page
-                              ? "bg-filter-menu text-accent-foreground"
-                              : ""
-                          } cursor-pointer flex items-center gap-1.5 px-3 py-2 w-full`}
-                          isActive={currentPage === item.page}
-                        >
-                          <div className="flex items-center justify-center w-4 h-4 flex-shrink-0">
-                            <item.icon className="h-5 w-5" />
-                          </div>
-                          <span
-                            className={`font-medium text-13 transition-opacity duration-300 ${
-                              sidebarCollapsed
-                                ? "opacity-0 w-0 overflow-hidden"
-                                : "opacity-100"
-                            }`}
-                          >
-                            {item.title}
-                          </span>
-                        </SidebarMenuButton>
-                      </Link>
-                    </MenuItemWithTooltip>
-                  </SidebarMenuItem>
+                  <MenuItemWithTooltip
+                    key={item.title}
+                    title={item.title}
+                    href={item.page}
+                    icon={item.icon}
+                    isActive={currentPage === item.page}
+                  />
                 ))}
-              </SidebarMenu>
+              </div>
             </div>
 
             {/* Bottom Navigation Items */}
-            {userRole !== "User" && (
-              <div className="mt-auto py-4 border-t border-border">
-                <SidebarMenu className="px-2" style={{ gap: "1px" }}>
-                  {visibleBottomNavigationItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <MenuItemWithTooltip title={item.title}>
-                        <Link href={item.page}>
-                          <SidebarMenuButton
-                            className={`text-card-foreground hover:bg-filter-menu hover:text-accent-foreground ${
-                              currentPage === item.page
-                                ? "bg-filter-menu text-accent-foreground"
-                                : ""
-                            } cursor-pointer flex items-center gap-1.5 px-3 py-2 w-full`}
-                            isActive={currentPage === item.page}
-                          >
-                            <div className="flex items-center justify-center w-4 h-4 flex-shrink-0">
-                              <item.icon className="h-5 w-5" />
-                            </div>
-                            <span
-                              className={`text-13 transition-opacity duration-300 ${
-                                sidebarCollapsed
-                                  ? "opacity-0 w-0 overflow-hidden"
-                                  : "opacity-100"
-                              }`}
-                            >
-                              {item.title}
-                            </span>
-                          </SidebarMenuButton>
-                        </Link>
-                      </MenuItemWithTooltip>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
+            <div className="mt-auto py-4 border-t border-border">
+              <div className="px-2 space-y-1">
+                {visibleBottomNavigationItems.map((item) => (
+                  <MenuItemWithTooltip
+                    key={item.title}
+                    title={item.title}
+                    href={item.page}
+                    icon={item.icon}
+                    isActive={currentPage === item.page}
+                  />
+                ))}
               </div>
-            )}
+            </div>
           </div>
         </SidebarProvider>
       </TooltipProvider>

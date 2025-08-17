@@ -77,7 +77,7 @@ export default function RootLayout({
           sizes="32x32"
         />
       </head>
-      <body className={`${Inter.className} antialiased`}>
+      <body className={`${Inter.className} antialiased`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

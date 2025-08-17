@@ -109,16 +109,13 @@ export function Header() {
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-[40px] max-w-screen items-center justify-between px-4">
+      <div className="container flex h-[60px] max-w-screen items-center justify-between px-6">
         {/* Logo Section */}
-        <div className="flex items-center ">
-          <Image
-            src={headerImageSrc}
-            alt="Logo"
-            width={107}
-            height={24}
-            priority
-          />
+        <div className="flex items-center">
+          <div className="flex flex-col justify-center">
+            <h1 className="text-lg font-bold text-foreground leading-tight">Poligap</h1>
+            <span className="text-xs text-muted-foreground leading-tight">Powered by Kroolo</span>
+          </div>
         </div>
 
         {/* Right Section - Theme Switcher and Profile */}
@@ -132,13 +129,15 @@ export function Header() {
             className="h-7 w-7 cursor-pointer"
             onClick={toggleTheme}
           >
-            <>
-              {resolvedTheme === "dark" ? (
+            {mounted ? (
+              resolvedTheme === "dark" ? (
                 <PiMoonStars className="h-4 w-4" />
               ) : (
                 <PiSun className="h-4 w-4" />
-              )}
-            </>
+              )
+            ) : (
+              <PiSun className="h-4 w-4" />
+            )}
             <span className="sr-only">Toggle theme</span>
           </Button>
 
