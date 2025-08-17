@@ -1,3 +1,20 @@
+# Poligap - AI-Powered Legal Compliance Platform
+
+**Powered by Kroolo**
+
+Poligap is an advanced AI-powered legal compliance and contract analysis platform that helps organizations ensure regulatory compliance and streamline contract review processes.
+
+## Features
+
+- **Compliance Check**: Upload documents for compliance analysis against multiple standards (HIPAA, GDPR, CCPA, SOX, PCI DSS, ISO 27001, and more)
+- **Contract Review**: AI-powered contract analysis with gap identification and suggestions
+- **AI Agents**: Manage and deploy specialized legal AI agents
+- **Task Management**: Organize and track compliance and legal tasks
+- **Interactive Chat**: AI-powered legal assistance and consultation
+- **Comprehensive Settings**: Manage compliance standards and platform configurations
+
+## Technology Stack
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
