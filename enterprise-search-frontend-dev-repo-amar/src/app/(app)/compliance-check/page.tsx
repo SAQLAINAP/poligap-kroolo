@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft } from "lucide-react";
+import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus } from "lucide-react";
+import { AssetPicker } from "@/components/AssetPicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ComplianceStandard {
   id: string;
@@ -17,13 +19,23 @@ interface ComplianceStandard {
   color: string;
 }
 
+interface ComplianceGap {
+  id: string;
+  title: string;
+  description: string;
+  priority: "critical" | "high" | "medium" | "low";
+  category: string;
+  recommendation: string;
+  section?: string;
+}
+
 interface ComplianceResult {
   id: string;
   fileName: string;
   standard: string;
   status: "compliant" | "non-compliant" | "partial";
   score: number;
-  gaps: string[];
+  gaps: ComplianceGap[];
   suggestions: string[];
   uploadDate: string;
   detailedAnalysis?: any;
@@ -312,15 +324,49 @@ const complianceStandards: ComplianceStandard[] = [
   }
 ];
 
+// Priority configuration with colors and icons
+const priorityConfig = {
+  critical: {
+    label: "Critical",
+    color: "bg-red-50 border-red-200 text-red-900 dark:bg-red-950 dark:border-red-800 dark:text-red-100",
+    badgeColor: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+    icon: AlertTriangle,
+    iconColor: "text-red-600 dark:text-red-400"
+  },
+  high: {
+    label: "High",
+    color: "bg-orange-50 border-orange-200 text-orange-900 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-100",
+    badgeColor: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+    icon: AlertCircle,
+    iconColor: "text-orange-600 dark:text-orange-400"
+  },
+  medium: {
+    label: "Medium",
+    color: "bg-yellow-50 border-yellow-200 text-yellow-900 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-100",
+    badgeColor: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+    icon: Info,
+    iconColor: "text-yellow-600 dark:text-yellow-400"
+  },
+  low: {
+    label: "Low",
+    color: "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-100",
+    badgeColor: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+    icon: Minus,
+    iconColor: "text-blue-600 dark:text-blue-400"
+  }
+};
+
 const initialResults: ComplianceResult[] = [];
 
 export default function ComplianceCheckPage() {
   const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [results, setResults] = useState<ComplianceResult[]>(initialResults);
   const [currentStep, setCurrentStep] = useState(1);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [results, setResults] = useState<ComplianceResult[]>([]);
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [analysisMethod, setAnalysisMethod] = useState<string>("");
+  const [selectedPriorityFilter, setSelectedPriorityFilter] = useState<string>("all");
 
   const steps = [
     { id: 1, title: "Select Standards", description: "Choose compliance standards" },
@@ -336,6 +382,21 @@ export default function ComplianceCheckPage() {
     }
   };
 
+  const handleAssetSelect = (assets: any[]) => {
+    if (assets.length > 0) {
+      const asset = assets[0];
+      // Convert asset to File-like object for consistency
+      const mockFile = {
+        name: asset.originalName,
+        size: asset.size || 0,
+        type: asset.mimetype || 'application/pdf',
+        lastModified: new Date(asset.uploadDate).getTime()
+      } as File;
+      
+      setUploadedFile(mockFile);
+    }
+  };
+
   const handleStandardToggle = (standardId: string) => {
     setSelectedStandards(prev => {
       if (prev.includes(standardId)) {
@@ -347,12 +408,20 @@ export default function ComplianceCheckPage() {
   };
 
   const handleAnalyze = async () => {
-    if (!uploadedFile || selectedStandards.length === 0) return;
+    if (!uploadedFile || !uploadedFile.name || selectedStandards.length === 0) {
+      console.error('Missing required data for analysis:', { uploadedFile: !!uploadedFile, fileName: uploadedFile?.name, standardsCount: selectedStandards.length });
+      return;
+    }
 
     setIsAnalyzing(true);
     setResults([]);
 
     try {
+      // Additional validation
+      if (!uploadedFile.name.endsWith('.pdf') && !uploadedFile.name.endsWith('.doc') && !uploadedFile.name.endsWith('.docx') && !uploadedFile.name.endsWith('.txt')) {
+        throw new Error('Unsupported file format. Please upload PDF, DOC, DOCX, or TXT files.');
+      }
+
       const formData = new FormData();
       formData.append('file', uploadedFile);
       formData.append('selectedStandards', JSON.stringify(selectedStandards));
@@ -375,13 +444,58 @@ export default function ComplianceCheckPage() {
       const overallScore = analysis.overallScore || 75;
       const status = overallScore >= 90 ? "compliant" : overallScore >= 70 ? "partial" : "non-compliant";
 
-      const allGaps: string[] = [];
+      const allGaps: ComplianceGap[] = [];
       const allSuggestions: string[] = [];
 
-      analysis.standardsAnalysis?.forEach((standardAnalysis: any) => {
+      analysis.standardsAnalysis?.forEach((standardAnalysis: any, index: number) => {
+        // Process regular gaps
         if (standardAnalysis.gaps && standardAnalysis.gaps.length > 0) {
-          allGaps.push(...standardAnalysis.gaps);
+          const gapsWithPriority = standardAnalysis.gaps.map((gap: string, gapIndex: number) => {
+            // Determine priority based on content and context
+            let priority: 'critical' | 'high' | 'medium' | 'low' = 'medium';
+            const gapLower = gap.toLowerCase();
+            
+            if (gapLower.includes('complete absence') || gapLower.includes('lacks any mention') || 
+                gapLower.includes('no procedures') || gapLower.includes('critical') ||
+                standardAnalysis.score === 0) {
+              priority = 'critical';
+            } else if (gapLower.includes('insufficient') || gapLower.includes('inadequate') || 
+                      gapLower.includes('missing') || standardAnalysis.score < 30) {
+              priority = 'high';
+            } else if (gapLower.includes('limited') || gapLower.includes('unclear') || 
+                      standardAnalysis.score < 70) {
+              priority = 'medium';
+            } else {
+              priority = 'low';
+            }
+            
+            return {
+              id: `gap-${index}-${gapIndex}`,
+              title: gap.split('.')[0]?.trim() || gap.substring(0, 80).trim(),
+              description: gap.replace(/•$/, '').trim(),
+              priority,
+              category: standardAnalysis.standard || 'General',
+              recommendation: `Address this ${priority} priority gap by implementing proper compliance measures for ${standardAnalysis.standard}.`,
+              section: `${standardAnalysis.standard} Analysis`
+            };
+          });
+          allGaps.push(...gapsWithPriority);
         }
+        
+        // Process critical issues as critical priority gaps
+        if (standardAnalysis.criticalIssues && standardAnalysis.criticalIssues.length > 0) {
+          const criticalGaps = standardAnalysis.criticalIssues.map((issue: string, issueIndex: number) => ({
+            id: `critical-${index}-${issueIndex}`,
+            title: issue.split('.')[0]?.trim() || issue.substring(0, 80).trim(),
+            description: issue.replace(/•$/, '').trim(),
+            priority: 'critical' as const,
+            category: standardAnalysis.standard || 'General',
+            recommendation: `This critical issue requires immediate attention and comprehensive remediation for ${standardAnalysis.standard} compliance.`,
+            section: `${standardAnalysis.standard} Critical Issues`
+          }));
+          allGaps.push(...criticalGaps);
+        }
+        
         if (standardAnalysis.suggestions && standardAnalysis.suggestions.length > 0) {
           allSuggestions.push(...standardAnalysis.suggestions);
         }
@@ -393,11 +507,19 @@ export default function ComplianceCheckPage() {
 
       const newResult: ComplianceResult = {
         id: Date.now().toString(),
-        fileName: uploadedFile.name,
+        fileName: uploadedFile?.name || 'Unknown File',
         standard: selectedStandards.map(s => s.toUpperCase()).join(", "),
         status: status,
         score: overallScore,
-        gaps: allGaps.length > 0 ? allGaps : ["Analysis completed but no specific compliance gaps were identified."],
+        gaps: allGaps.length > 0 ? allGaps : [{
+          id: 'no-gaps',
+          title: 'No Gaps Identified',
+          description: 'Analysis completed but no specific compliance gaps were identified.',
+          priority: 'low',
+          category: 'General',
+          recommendation: 'Continue monitoring compliance status.',
+          section: 'Overall'
+        }],
         suggestions: allSuggestions.length > 0 ? allSuggestions : ["No specific improvement suggestions were generated."],
         uploadDate: new Date().toISOString().split('T')[0],
         detailedAnalysis: analysis
@@ -409,11 +531,19 @@ export default function ComplianceCheckPage() {
       console.error('Analysis error:', error);
       const errorResult: ComplianceResult = {
         id: Date.now().toString(),
-        fileName: uploadedFile.name,
+        fileName: uploadedFile?.name || 'Unknown File',
         standard: selectedStandards.map(s => s.toUpperCase()).join(", "),
         status: "non-compliant",
         score: 0,
-        gaps: [`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
+        gaps: [{
+          id: 'analysis-error',
+          title: 'Analysis Error',
+          description: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          priority: 'critical',
+          category: 'System',
+          recommendation: 'Please try again or contact support',
+          section: 'Error'
+        }],
         suggestions: ["Please try again or contact support"],
         uploadDate: new Date().toISOString().split('T')[0]
       };
@@ -546,10 +676,8 @@ export default function ComplianceCheckPage() {
                         </div>
                       )}
                       <standard.icon className="h-7 w-7 mx-auto mb-3 text-primary" />
-                      <h3 className="font-semibold text-sm mb-1">{standard.name}</h3>
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {standard.description}
-                      </p>
+                      <h3 className="font-medium text-sm mb-1">{standard.name}</h3>
+                      <p className="text-xs text-muted-foreground leading-tight">{standard.description}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -559,55 +687,81 @@ export default function ComplianceCheckPage() {
 
           {/* Step 2: Upload Document */}
           {currentStep === 2 && (
-            <div className="space-y-8">
-              <div className="relative group">
-                <div className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-16 text-center transition-all duration-300 hover:border-primary/50 hover:bg-primary/5 group-hover:scale-[1.02]">
-                  <div className="transition-transform duration-300 group-hover:scale-110">
-                    <Upload className="h-20 w-20 mx-auto mb-6 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-2xl font-semibold text-foreground">Drop your file here or click to browse</p>
-                    <p className="text-muted-foreground text-lg">
-                      Supports PDF, DOC, DOCX files up to 10MB
-                    </p>
-                    <div className="flex justify-center items-center gap-2 text-sm text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      <span>PDF</span>
-                      <span>•</span>
-                      <span>DOC</span>
-                      <span>•</span>
-                      <span>DOCX</span>
+            <div className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-8">
+                {/* Upload New File */}
+                <Card className="border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors">
+                  <CardHeader className="text-center">
+                    <CardTitle className="flex items-center justify-center gap-2">
+                      <Upload className="h-5 w-5" />
+                      Upload New Document
+                    </CardTitle>
+                    <CardDescription>
+                      Upload a policy document for compliance analysis
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Upload className="h-8 w-8 text-primary" />
                     </div>
-                  </div>
-                  <div className="mt-8">
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="relative overflow-hidden transition-all duration-300 hover:scale-105"
-                      onClick={() => document.getElementById('file-upload')?.click()}
+                    <div>
+                      <Input
+                        type="file"
+                        onChange={handleFileUpload}
+                        accept=".pdf,.doc,.docx,.txt"
+                        className="hidden"
+                        id="file-upload"
+                      />
+                      <Button asChild variant="outline" className="w-full">
+                        <label htmlFor="file-upload" className="cursor-pointer">
+                          Choose File
+                        </label>
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Supported formats: PDF, DOC, DOCX, TXT
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Select from Assets */}
+                <Card className="border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors">
+                  <CardHeader className="text-center">
+                    <CardTitle className="flex items-center justify-center gap-2">
+                      <FolderOpen className="h-5 w-5" />
+                      Select from Assets
+                    </CardTitle>
+                    <CardDescription>
+                      Choose from your previously uploaded documents
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                      <FolderOpen className="h-8 w-8 text-primary" />
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => setIsAssetPickerOpen(true)}
                     >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Choose File
+                      Browse Assets
                     </Button>
-                  </div>
-                  <Input
-                    id="file-upload"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                </div>
+                    <p className="text-xs text-muted-foreground">
+                      Select from your uploaded documents
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
 
+              {/* File Selected Display */}
               {uploadedFile && (
-                <div className="animate-in slide-in-from-bottom-4 duration-500">
-                  <Card className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4">
+                <div className="mt-6">
+                  <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-4">
                         <div className="flex-shrink-0">
-                          <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                            <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                          <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                            <FileText className="h-6 w-6 text-green-600 dark:text-green-400" />
                           </div>
                         </div>
                         <div className="flex-1">
@@ -754,71 +908,196 @@ export default function ComplianceCheckPage() {
                         <Progress value={result.score} className="h-3" />
                       </div>
 
-                      <div className="grid md:grid-cols-2 gap-6">
-                        {result.gaps.length > 0 && (
-                          <Card>
-                            <CardHeader>
-                              <CardTitle className="text-lg flex items-center gap-2">
-                                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                                Identified Gaps
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <ul className="space-y-2">
-                                {result.gaps.map((gap, index) => (
-                                  <li key={index} className="text-sm flex items-start gap-2">
-                                    <span className="text-yellow-600 mt-1">•</span>
-                                    {gap}
-                                  </li>
-                                ))}
-                              </ul>
+                      {/* Issues Summary with Counts */}
+                      <div className="mb-6">
+                        <h4 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                          <AlertTriangle className="h-5 w-5 text-orange-600" />
+                          Compliance Issues Overview
+                        </h4>
+                        
+                        {(() => {
+                          const issueCounts = result.gaps.reduce((acc, gap) => {
+                            acc[gap.priority] = (acc[gap.priority] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>);
+                          
+                          return (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                              {Object.entries(priorityConfig).map(([priority, config]) => {
+                                const count = issueCounts[priority] || 0;
+                                const IconComponent = config.icon;
+                                
+                                return (
+                                  <Card key={priority} className={`${config.color} border-2`}>
+                                    <CardContent className="p-4 text-center">
+                                      <div className="flex items-center justify-center gap-2 mb-2">
+                                        <IconComponent className={`h-6 w-6 ${config.iconColor}`} />
+                                        <span className="text-2xl font-bold">{count}</span>
+                                      </div>
+                                      <h5 className="font-semibold text-sm">{config.label}</h5>
+                                      <p className="text-xs opacity-75 mt-1">
+                                        {count === 1 ? 'Issue' : 'Issues'}
+                                      </p>
+                                    </CardContent>
+                                  </Card>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
+                        }
+                        
+                        {/* Priority Filter */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            Total Issues: {result.gaps.length}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <Select value={selectedPriorityFilter} onValueChange={setSelectedPriorityFilter}>
+                              <SelectTrigger className="w-40">
+                                <SelectValue placeholder="Filter by priority" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Priorities</SelectItem>
+                                <SelectItem value="critical">Critical</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="low">Low</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {selectedPriorityFilter !== "all" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedPriorityFilter("all")}
+                                className="h-8 px-2"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Issues organized by priority */}
+                      <div className="space-y-6">
+                        {result.gaps.length > 0 ? (
+                          (() => {
+                            const filteredGaps = selectedPriorityFilter === "all" 
+                              ? result.gaps 
+                              : result.gaps.filter(gap => gap.priority === selectedPriorityFilter);
+                            
+                            const gapsByPriority = filteredGaps.reduce((acc, gap) => {
+                              if (!acc[gap.priority]) acc[gap.priority] = [];
+                              acc[gap.priority].push(gap);
+                              return acc;
+                            }, {} as Record<string, ComplianceGap[]>);
+                            
+                            const priorityOrder = ['critical', 'high', 'medium', 'low'];
+                            
+                            return (
+                              <div className="space-y-6">
+                                {priorityOrder.map(priority => {
+                                  const gaps = gapsByPriority[priority];
+                                  if (!gaps || gaps.length === 0) return null;
+                                  
+                                  const config = priorityConfig[priority as keyof typeof priorityConfig];
+                                  const IconComponent = config.icon;
+                                  
+                                  return (
+                                    <div key={priority} className="space-y-4">
+                                      <div className="flex items-center gap-3 mb-4">
+                                        <IconComponent className={`h-6 w-6 ${config.iconColor}`} />
+                                        <h5 className="font-bold text-xl">{config.label} Priority Issues</h5>
+                                        <Badge className={`${config.badgeColor} text-sm px-3 py-1`}>{gaps.length}</Badge>
+                                      </div>
+                                      
+                                      <div className="space-y-3">
+                                        {gaps.map((gap) => (
+                                          <Card key={gap.id} className={`${config.color} border-l-8 shadow-sm hover:shadow-md transition-shadow`}>
+                                            <CardContent className="p-6">
+                                              <div className="space-y-3">
+                                                <div className="flex items-start justify-between">
+                                                  <div className="flex-1">
+                                                    <h6 className="font-bold text-base mb-2">{gap.title}</h6>
+                                                    <p className="text-sm leading-relaxed mb-3">{gap.description}</p>
+                                                  </div>
+                                                  <Badge variant="outline" className="ml-4 text-xs whitespace-nowrap">
+                                                    {gap.category}
+                                                  </Badge>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-6 text-xs opacity-80">
+                                                  <span className="flex items-center gap-1">
+                                                    <FileText className="h-3 w-3" />
+                                                    {gap.section}
+                                                  </span>
+                                                  <span className="flex items-center gap-1">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    {config.label} Priority
+                                                  </span>
+                                                </div>
+                                                
+                                                <div className="mt-4 p-3 bg-white/60 dark:bg-black/30 rounded-lg border">
+                                                  <div className="flex items-start gap-2">
+                                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                                    <div>
+                                                      <p className="font-semibold text-xs text-green-800 dark:text-green-200 mb-1">Recommended Action:</p>
+                                                      <p className="text-xs leading-relaxed">{gap.recommendation}</p>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </CardContent>
+                                          </Card>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                }).filter(Boolean)}
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <Card className="bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800">
+                            <CardContent className="p-8 text-center">
+                              <CheckCircle className="h-16 w-16 text-green-600 dark:text-green-400 mx-auto mb-4" />
+                              <h4 className="font-bold text-green-900 dark:text-green-100 mb-2 text-lg">No Compliance Issues Found</h4>
+                              <p className="text-green-700 dark:text-green-300">Your document appears to be fully compliant with the selected standards.</p>
                             </CardContent>
                           </Card>
                         )}
+                      </div>
 
-                        {result.suggestions.length > 0 && (
-                          <Card>
+                      {/* General Suggestions Section - Moved Below Issues */}
+                      {result.suggestions.length > 0 && (
+                        <div className="mt-8">
+                          <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
                             <CardHeader>
-                              <CardTitle className="text-lg flex items-center gap-2">
-                                <CheckCircle className="h-5 w-5 text-green-600" />
-                                Suggestions for Improvement
+                              <CardTitle className="text-xl flex items-center gap-3">
+                                <CheckCircle className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                                General Improvement Recommendations
                               </CardTitle>
+                              <CardDescription className="text-blue-700 dark:text-blue-300">
+                                Additional suggestions to enhance your compliance posture
+                              </CardDescription>
                             </CardHeader>
                             <CardContent>
-                              <ul className="space-y-2">
+                              <div className="space-y-4">
                                 {result.suggestions.map((suggestion, index) => (
-                                  <li key={index} className="text-sm flex items-start gap-2">
-                                    <span className="text-green-600 mt-1">•</span>
-                                    {suggestion}
-                                  </li>
+                                  <div key={index} className="flex items-start gap-3 p-3 bg-white/60 dark:bg-black/30 rounded-lg border">
+                                    <div className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mt-0.5">
+                                      <span className="text-blue-600 dark:text-blue-400 text-xs font-bold">{index + 1}</span>
+                                    </div>
+                                    <p className="text-sm leading-relaxed">{suggestion}</p>
+                                  </div>
                                 ))}
-                              </ul>
+                              </div>
                             </CardContent>
                           </Card>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2 pt-4">
-                        <Button variant="outline">
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
-                        <Button variant="outline">
-                          <Download className="h-4 w-4 mr-2" />
-                          Export Report
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setCurrentStep(1);
-                            setResults([]);
-                            setSelectedStandards([]);
-                            setUploadedFile(null);
-                          }}
-                        >
-                          Start New Analysis
-                        </Button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -864,6 +1143,16 @@ export default function ComplianceCheckPage() {
           )}
         </div>
       )}
+
+      {/* Asset Picker Modal */}
+      <AssetPicker
+        isOpen={isAssetPickerOpen}
+        onClose={() => setIsAssetPickerOpen(false)}
+        onSelect={handleAssetSelect}
+        allowedTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']}
+        title="Select Document"
+        description="Choose a document from your assets for compliance analysis"
+      />
     </div>
   );
 }

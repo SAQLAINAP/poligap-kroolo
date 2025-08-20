@@ -10,6 +10,7 @@ import {
   Bot,
   Settings,
   Home,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,7 @@ type PageType =
   | "compliance-check"
   | "contract-review"
   | "ai-agents"
+  | "upload-assets"
   | "settings";
 
 const navigationItems = [
@@ -66,6 +68,11 @@ const navigationItems = [
     title: "AI Agents",
     icon: Bot,
     page: "/ai-agents" as PageType,
+  },
+  {
+    title: "Upload Assets",
+    icon: Upload,
+    page: "/upload-assets" as PageType,
   },
 ];
 

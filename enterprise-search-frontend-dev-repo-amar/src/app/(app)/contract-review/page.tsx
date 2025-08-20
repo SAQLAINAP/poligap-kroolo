@@ -1,13 +1,70 @@
 "use client";
 
-import React, { useState } from "react";
-import { FileText, Upload, Eye, Download, AlertTriangle, CheckCircle, Clock, User, ChevronRight, ChevronLeft, Building, Users, Shield, Handshake, Award, Home, TrendingUp, Car, ShoppingCart, Truck, Crown, Network, Search, Filter, Briefcase, Globe, Heart, Zap, Wifi, Database, Code, Palette, Music, Camera, Plane, Ship, Factory, Hammer, Wrench, Cog, Book, GraduationCap, Stethoscope, Scale, Gavel, DollarSign, CreditCard, PiggyBank, Landmark, Info } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { FileText, Upload, Eye, Download, AlertTriangle, CheckCircle, Clock, User, ChevronRight, ChevronLeft, Building, Users, Shield, Handshake, Award, Home, TrendingUp, Car, ShoppingCart, Truck, Crown, Network, Search, Filter, Briefcase, Globe, Heart, Zap, Wifi, Database, Code, Palette, Music, Camera, Plane, Ship, Factory, Hammer, Wrench, Cog, Book, GraduationCap, Stethoscope, Scale, Gavel, DollarSign, CreditCard, PiggyBank, Landmark, Info, FolderOpen, BookOpen, Library, Edit3, RotateCcw, Save, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AssetPicker } from "@/components/AssetPicker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+interface ContractTemplate {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  sections: TemplateSection[];
+  lastUpdated: string;
+  isBaseline: boolean;
+  sources: string[];
+}
+
+interface TemplateSection {
+  id: string;
+  title: string;
+  content: string;
+  isRequired: boolean;
+  priority: "critical" | "high" | "medium" | "low";
+  guidelines: string[];
+}
+
+interface DocumentGap {
+  id: string;
+  sectionTitle: string;
+  gapType: "missing" | "weak" | "incomplete" | "non-compliant";
+  severity: "critical" | "high" | "medium" | "low";
+  description: string;
+  recommendation: string;
+  startIndex: number;
+  endIndex: number;
+  originalText?: string;
+  suggestedText?: string;
+}
+
+interface ExtractedDocument {
+  id: string;
+  fileName: string;
+  fullText: string;
+  sections: DocumentSection[];
+  gaps: DocumentGap[];
+  overallScore: number;
+  templateId: string;
+}
+
+interface DocumentSection {
+  id: string;
+  title: string;
+  content: string;
+  startIndex: number;
+  endIndex: number;
+  hasGaps: boolean;
+  gapIds: string[];
+}
 
 interface ContractReview {
   id: string;
@@ -26,14 +83,262 @@ interface ContractReview {
 // Dynamic reviews will be loaded from API or user uploads
 const initialReviews: ContractReview[] = [];
 
-export default function ContractReviewPage() {
-  const [reviews, setReviews] = useState<ContractReview[]>(initialReviews);
+// Mock knowledge base templates
+const knowledgeBaseTemplates: ContractTemplate[] = [
+  {
+    id: "service-agreement",
+    name: "Service Agreement Template",
+    type: "service",
+    description: "Baseline template for service agreements with all required clauses",
+    sections: [
+      {
+        id: "parties",
+        title: "Parties",
+        content: "This Agreement is entered between [Company Name] and [Service Provider]",
+        isRequired: true,
+        priority: "critical",
+        guidelines: ["Must clearly identify all parties", "Include legal entity names and addresses"]
+      },
+      {
+        id: "scope",
+        title: "Scope of Services",
+        content: "Detailed description of services to be provided",
+        isRequired: true,
+        priority: "critical",
+        guidelines: ["Must be specific and measurable", "Include deliverables and timelines"]
+      },
+      {
+        id: "payment",
+        title: "Payment Terms",
+        content: "Payment schedule, amounts, and terms",
+        isRequired: true,
+        priority: "high",
+        guidelines: ["Clear payment schedule", "Late payment penalties", "Currency specification"]
+      },
+      {
+        id: "termination",
+        title: "Termination Clause",
+        content: "Conditions under which agreement can be terminated",
+        isRequired: true,
+        priority: "high",
+        guidelines: ["Notice period requirements", "Termination for cause", "Post-termination obligations"]
+      },
+      {
+        id: "liability",
+        title: "Limitation of Liability",
+        content: "Liability limitations and indemnification clauses",
+        isRequired: true,
+        priority: "critical",
+        guidelines: ["Cap on damages", "Mutual indemnification", "Insurance requirements"]
+      }
+    ],
+    lastUpdated: "2024-01-15",
+    isBaseline: true,
+    sources: ["Internal Legal KB", "Law Insider"]
+  },
+  { id: "msa", name: "Master Services Agreement", type: "service", description: "Standard MSA with SOWs", sections: [
+      { id: "msa-def", title: "Definitions", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "msa-scope", title: "Scope of Services", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "msa-fees", title: "Fees & Payment", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "msa-term", title: "Term & Termination", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "msa-liability", title: "Limitation of Liability", content: "", isRequired: true, priority: "critical", guidelines: [] }
+    ], lastUpdated: "2024-02-10", isBaseline: true, sources: ["Internal Legal KB", "Law Insider"] },
+  { id: "sow", name: "Statement of Work (SOW)", type: "service", description: "Detailed work scope", sections: [
+      { id: "sow-deliverables", title: "Deliverables", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "sow-milestones", title: "Milestones", content: "", isRequired: false, priority: "medium", guidelines: [] },
+      { id: "sow-acceptance", title: "Acceptance Criteria", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-03-12", isBaseline: false, sources: ["Internal Legal KB"] },
+  { id: "nda-mutual", name: "Mutual NDA", type: "legal", description: "Mutual confidentiality obligations", sections: [
+      { id: "nda-def", title: "Definitions", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "nda-conf", title: "Confidential Information", content: "", isRequired: true, priority: "critical", guidelines: [] },
+      { id: "nda-term", title: "Term", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "nda-excl", title: "Exclusions", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "nda-rem", title: "Remedies", content: "", isRequired: false, priority: "low", guidelines: [] }
+    ], lastUpdated: "2024-01-28", isBaseline: true, sources: ["Cornell LII", "Law Insider"] },
+  { id: "nda-oneway", name: "One-way NDA", type: "legal", description: "Disclosing party protections", sections: [
+      { id: "ondadef", title: "Definitions", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "ondarecip", title: "Recipient Obligations", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "ondaterm", title: "Term & Return", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2023-12-05", isBaseline: false, sources: ["Cornell LII"] },
+  { id: "dpa", name: "Data Processing Addendum", type: "technology", description: "GDPR/CCPA aligned DPA", sections: [
+      { id: "dpa-roles", title: "Roles & Responsibilities", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "dpa-security", title: "Security Measures", content: "", isRequired: true, priority: "critical", guidelines: [] },
+      { id: "dpa-sub", title: "Subprocessors", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "dpa-xfer", title: "Data Transfers", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "dpa-breach", title: "Breach Notification", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-04-02", isBaseline: true, sources: ["EDPB", "ICO"] },
+  { id: "sla", name: "Service Level Agreement", type: "technology", description: "Uptime and remedies", sections: [
+      { id: "sla-uptime", title: "Uptime Commitment", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "sla-credits", title: "Service Credits", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "sla-support", title: "Support Tiers", content: "", isRequired: false, priority: "low", guidelines: [] }
+    ], lastUpdated: "2024-03-20", isBaseline: true, sources: ["Internal Legal KB"] },
+  { id: "eula", name: "End User License Agreement", type: "technology", description: "Software licensing terms", sections: [
+      { id: "eula-license", title: "License Grant", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "eula-restrict", title: "Restrictions", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "eula-warranty", title: "Disclaimer/Warranty", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-01-06", isBaseline: false, sources: ["Open Source Templates", "Law Insider"] },
+  { id: "reseller", name: "Reseller Agreement", type: "commercial", description: "Channel partner terms", sections: [
+      { id: "reseller-territory", title: "Territory", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "reseller-targets", title: "Sales Targets", content: "", isRequired: false, priority: "low", guidelines: [] },
+      { id: "reseller-brand", title: "Branding & Compliance", content: "", isRequired: false, priority: "low", guidelines: [] }
+    ], lastUpdated: "2024-02-14", isBaseline: false, sources: ["Law Insider"] },
+  { id: "distribution", name: "Distribution Agreement", type: "commercial", description: "Territories and quotas", sections: [
+      { id: "dist-territory", title: "Territory & Exclusivity", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "dist-min", title: "Minimum Commitments", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-03-01", isBaseline: false, sources: ["Law Insider"] },
+  { id: "license-ip", name: "IP License Agreement", type: "legal", description: "Scope and exclusivity", sections: [
+      { id: "ip-scope", title: "Scope of License", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "ip-royalty", title: "Royalties", content: "", isRequired: false, priority: "low", guidelines: [] }
+    ], lastUpdated: "2024-01-19", isBaseline: true, sources: ["WIPO", "Law Insider"] },
+  { id: "subprocessing", name: "Sub-processor Agreement", type: "technology", description: "Downstream obligations", sections: [
+      { id: "sub-contract", title: "Contractual Flowdown", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-02-27", isBaseline: false, sources: ["EDPB"] },
+  { id: "consulting", name: "Consulting Agreement", type: "business", description: "Advisory scope and fees", sections: [
+      { id: "consult-scope", title: "Scope", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "consult-fees", title: "Fees", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-02-08", isBaseline: false, sources: ["Internal Legal KB"] },
+  { id: "employment", name: "Employment Agreement", type: "legal", description: "Employee terms and IP", sections: [
+      { id: "emp-role", title: "Role & Duties", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "emp-comp", title: "Compensation", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "emp-ip", title: "IP Assignment", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-03-11", isBaseline: true, sources: ["SHRM", "Law Insider"] },
+  { id: "contractor", name: "Independent Contractor", type: "legal", description: "Contractor engagement terms", sections: [
+      { id: "ctr-scope", title: "Scope", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "ctr-ip", title: "IP & Ownership", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-03-05", isBaseline: true, sources: ["SHRM"] },
+  { id: "partners", name: "Partnership Agreement", type: "business", description: "Governance and capital", sections: [
+      { id: "part-cap", title: "Capital Contributions", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "part-govern", title: "Governance", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-02-01", isBaseline: false, sources: ["Law Insider"] },
+  { id: "jv", name: "Joint Venture Agreement", type: "business", description: "JV structure and exits", sections: [
+      { id: "jv-structure", title: "Structure", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-01-30", isBaseline: false, sources: ["Law Insider"] },
+  { id: "franchise", name: "Franchise Agreement", type: "business", description: "Franchise operations", sections: [
+      { id: "fran-fees", title: "Fees", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-01-22", isBaseline: false, sources: ["FTC Franchise Guide"] },
+  { id: "lease-commercial", name: "Commercial Lease", type: "property", description: "Premises and rent", sections: [
+      { id: "lease-term", title: "Term", content: "", isRequired: true, priority: "medium", guidelines: [] },
+      { id: "lease-rent", title: "Rent & Escalation", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-03-25", isBaseline: true, sources: ["Law Insider"] },
+  { id: "lease-equipment", name: "Equipment Lease", type: "property", description: "Equipment rental terms", sections: [
+      { id: "el-term", title: "Term & Ownership", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-01-18", isBaseline: false, sources: ["Law Insider"] },
+  { id: "purchase", name: "Purchase Agreement", type: "commercial", description: "Sale of goods terms", sections: [
+      { id: "po-goods", title: "Goods & Delivery", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "po-inspect", title: "Inspection & Acceptance", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-02-21", isBaseline: true, sources: ["UCC", "Law Insider"] },
+  { id: "supply", name: "Supply Agreement", type: "commercial", description: "Supply commitments", sections: [
+      { id: "supply-forecast", title: "Forecast & Orders", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-02-26", isBaseline: false, sources: ["Law Insider"] },
+  { id: "manufacturing", name: "Manufacturing Agreement", type: "commercial", description: "Production and quality", sections: [
+      { id: "mfg-quality", title: "Quality & Audits", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-03-02", isBaseline: false, sources: ["ISO", "Law Insider"] },
+  { id: "maintenance", name: "Maintenance Agreement", type: "service", description: "Support and repairs", sections: [
+      { id: "maint-scope", title: "Scope & SLAs", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-03-08", isBaseline: false, sources: ["Internal Legal KB"] },
+  { id: "warranty", name: "Warranty Agreement", type: "commercial", description: "Warranty scope/limits", sections: [
+      { id: "warr-scope", title: "Scope & Duration", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-01-26", isBaseline: false, sources: ["Manufacturing Templates"] },
+  { id: "software-license", name: "Software License", type: "technology", description: "On-prem license terms", sections: [
+      { id: "swl-grant", title: "Grant & Restrictions", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-02-02", isBaseline: true, sources: ["Open Source Templates", "Law Insider"] },
+  { id: "saas", name: "SaaS Subscription", type: "technology", description: "Cloud subscription terms", sections: [
+      { id: "saas-sub", title: "Subscription & Term", content: "", isRequired: true, priority: "high", guidelines: [] },
+      { id: "saas-data", title: "Data & Privacy", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-02-12", isBaseline: true, sources: ["Internal Legal KB"] },
+  { id: "hosting", name: "Hosting Agreement", type: "technology", description: "Hosting obligations", sections: [
+      { id: "host-availability", title: "Availability & Support", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-02-18", isBaseline: false, sources: ["Internal Legal KB"] },
+  { id: "api", name: "API Terms", type: "technology", description: "API usage and limits", sections: [
+      { id: "api-keys", title: "API Keys & Limits", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-02-24", isBaseline: false, sources: ["Developer Docs Samples"] },
+  { id: "privacy", name: "Privacy Policy", type: "legal", description: "Data privacy disclosures", sections: [
+      { id: "pp-collect", title: "Collection & Use", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-03-14", isBaseline: true, sources: ["ICO", "OECD"] },
+  { id: "terms", name: "Terms of Service", type: "legal", description: "Website/app terms", sections: [
+      { id: "tos-use", title: "Acceptable Use", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-03-19", isBaseline: true, sources: ["Internal Legal KB"] },
+  { id: "affiliate", name: "Affiliate Agreement", type: "commercial", description: "Affiliate payouts", sections: [
+      { id: "aff-payouts", title: "Payouts & Tracking", content: "", isRequired: false, priority: "low", guidelines: [] }
+    ], lastUpdated: "2024-03-23", isBaseline: false, sources: ["Marketing Templates"] },
+  { id: "influencer", name: "Influencer Agreement", type: "commercial", description: "Creator campaigns", sections: [
+      { id: "inf-deliverables", title: "Deliverables & IP", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-03-28", isBaseline: false, sources: ["Marketing Templates"] },
+  { id: "sponsorship", name: "Sponsorship Agreement", type: "commercial", description: "Event sponsorship", sections: [
+      { id: "spon-rights", title: "Sponsorship Rights", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-04-03", isBaseline: false, sources: ["Event Templates"] },
+  { id: "merger", name: "Merger Agreement", type: "business", description: "M&A transaction doc", sections: [
+      { id: "mna-reps", title: "Reps & Warranties", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-04-06", isBaseline: false, sources: ["ABA Model Docs"] },
+  { id: "asset-sale", name: "Asset Purchase Agreement", type: "business", description: "Asset transfer terms", sections: [
+      { id: "apa-assets", title: "Assets & Liabilities", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-04-09", isBaseline: false, sources: ["ABA Model Docs"] },
+  { id: "shareholders", name: "Shareholders Agreement", type: "business", description: "Shareholder rights", sections: [
+      { id: "sha-rights", title: "Rights & Restrictions", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-04-12", isBaseline: true, sources: ["Internal Legal KB"] },
+  { id: "bylaws", name: "Company Bylaws", type: "business", description: "Corporate governance", sections: [
+      { id: "bylaws-board", title: "Board & Meetings", content: "", isRequired: true, priority: "medium", guidelines: [] }
+    ], lastUpdated: "2024-04-15", isBaseline: false, sources: ["Internal Legal KB"] },
+  { id: "gdpr", name: "GDPR Addendum", type: "technology", description: "EU data compliance", sections: [
+      { id: "gdpr-basis", title: "Legal Basis", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-04-18", isBaseline: true, sources: ["EDPB", "ICO"] },
+  { id: "hipaa", name: "HIPAA BAA", type: "healthcare", description: "Protected health info", sections: [
+      { id: "hipaa-safeguards", title: "Safeguards & PHI", content: "", isRequired: true, priority: "high", guidelines: [] }
+    ], lastUpdated: "2024-04-20", isBaseline: true, sources: ["HHS"] }
+];
+
+// Severity color configuration
+const severityConfig = {
+  critical: {
+    bg: "bg-red-100 dark:bg-red-950",
+    border: "border-red-300 dark:border-red-700",
+    text: "text-red-900 dark:text-red-100",
+    highlight: "bg-red-200 dark:bg-red-800"
+  },
+  high: {
+    bg: "bg-orange-100 dark:bg-orange-950",
+    border: "border-orange-300 dark:border-orange-700",
+    text: "text-orange-900 dark:text-orange-100",
+    highlight: "bg-orange-200 dark:bg-orange-800"
+  },
+  medium: {
+    bg: "bg-yellow-100 dark:bg-yellow-950",
+    border: "border-yellow-300 dark:border-yellow-700",
+    text: "text-yellow-900 dark:text-yellow-100",
+    highlight: "bg-yellow-200 dark:bg-yellow-800"
+  },
+  low: {
+    bg: "bg-blue-100 dark:bg-blue-950",
+    border: "border-blue-300 dark:border-blue-700",
+    text: "text-blue-900 dark:text-blue-100",
+    highlight: "bg-blue-200 dark:bg-blue-800"
+  }
+};
+
+export default function ContractReview() {
+  const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [selectedContractTypes, setSelectedContractTypes] = useState<string[]>([]);
+  const [extractedDocument, setExtractedDocument] = useState<ExtractedDocument | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [reviews, setReviews] = useState<ContractReview[]>(initialReviews);
+  const [selectedContractTypes, setSelectedContractTypes] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("all");
+  const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  const templatesContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollTemplates = (direction: 'left' | 'right') => {
+    const el = templatesContainerRef.current;
+    if (!el) return;
+    const amount = el.clientWidth * 0.8;
+    el.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
+  };
+
 
   const contractTypes = [
     // Business Contracts
@@ -98,12 +403,218 @@ export default function ContractReviewPage() {
     }
   };
 
+  // Apply suggestion for a single gap into editedText
+  const applyGapSuggestion = (gap: DocumentGap) => {
+    if (!gap.suggestedText) return;
+    if (gap.startIndex >= 0 && gap.endIndex >= gap.startIndex) {
+      const before = editedText.substring(0, gap.startIndex);
+      const after = editedText.substring(gap.endIndex);
+      setEditedText(`${before}${gap.suggestedText}${after}`);
+    } else {
+      // Missing clause: append to end with spacing
+      const sep = editedText.endsWith("\n") ? "\n\n" : "\n\n";
+      setEditedText(`${editedText}${sep}${gap.suggestedText}`);
+    }
+  };
+
+  // Apply all suggestions
+  const acceptAllSuggestions = () => {
+    if (!extractedDocument) return;
+    let updated = editedText;
+    // Apply in reverse order of startIndex to keep indices valid
+    const ordered = [...extractedDocument.gaps].sort((a, b) => (a.startIndex ?? -1) - (b.startIndex ?? -1));
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      const gap = ordered[i];
+      if (!gap.suggestedText) continue;
+      if (gap.startIndex >= 0 && gap.endIndex >= gap.startIndex) {
+        const before = updated.substring(0, gap.startIndex);
+        const after = updated.substring(gap.endIndex);
+        updated = `${before}${gap.suggestedText}${after}`;
+      } else {
+        const sep = updated.endsWith("\n") ? "\n\n" : "\n\n";
+        updated = `${updated}${sep}${gap.suggestedText}`;
+      }
+    }
+    setEditedText(updated);
+  };
+
+  const handleAssetSelect = (asset: any) => {
+    // Convert asset to File-like object for consistency with file upload
+    const mockFile = {
+      name: asset.name,
+      size: asset.size || 0,
+      type: asset.type || 'application/pdf',
+      lastModified: asset.lastModified || Date.now()
+    } as File;
+    
+    setUploadedFile(mockFile);
+    setIsAssetPickerOpen(false);
+  };
+
   const steps = [
-    { id: 1, title: "Select Contract Type", description: "Choose the type of contract for analysis" },
+    { id: 1, title: "Select Template", description: "Choose a baseline template from knowledge base" },
     { id: 2, title: "Upload Contract", description: "Upload your contract document" },
-    { id: 3, title: "Review & Analyze", description: "Review selections and analyze contract" },
-    { id: 4, title: "Results", description: "View contract analysis results" }
+    { id: 3, title: "Review Document", description: "Review extracted text with highlighted gaps" },
+    { id: 4, title: "Make Corrections", description: "Edit and finalize the document" }
   ];
+
+  const handleTemplateSelect = (template: ContractTemplate) => {
+    setSelectedTemplate(template);
+    setCurrentStep(2);
+  };
+
+  const handleDocumentExtraction = async () => {
+    if (!uploadedFile || !selectedTemplate) return;
+
+    setIsAnalyzing(true);
+    try {
+      // Mock document extraction and analysis
+      const mockExtractedText = `SERVICE AGREEMENT
+
+This Agreement is made between ABC Corp and XYZ Services.
+
+SCOPE OF WORK:
+Provider will deliver consulting services as needed.
+
+PAYMENT:
+Payment due within 30 days.
+
+TERMINATION:
+Either party may terminate with notice.
+
+The parties agree to the terms herein.`;
+
+      const mockGaps: DocumentGap[] = [
+        {
+          id: "gap-1",
+          sectionTitle: "Parties",
+          gapType: "incomplete",
+          severity: "high",
+          description: "Missing legal entity details and addresses",
+          recommendation: "Include full legal names, addresses, and entity types",
+          startIndex: 45,
+          endIndex: 85,
+          originalText: "ABC Corp and XYZ Services",
+          suggestedText: "ABC Corp, a Delaware corporation located at [Address], and XYZ Services LLC, a limited liability company located at [Address]"
+        },
+        {
+          id: "gap-2",
+          sectionTitle: "Scope of Services",
+          gapType: "weak",
+          severity: "critical",
+          description: "Vague scope definition lacks specificity",
+          recommendation: "Define specific deliverables, timelines, and success criteria",
+          startIndex: 120,
+          endIndex: 170,
+          originalText: "Provider will deliver consulting services as needed",
+          suggestedText: "Provider will deliver the following consulting services: [List specific services], with deliverables due on [specific dates], meeting the following criteria: [success metrics]"
+        },
+        {
+          id: "gap-3",
+          sectionTitle: "Limitation of Liability",
+          gapType: "missing",
+          severity: "critical",
+          description: "Missing liability limitation clause",
+          recommendation: "Add comprehensive liability limitation and indemnification clauses",
+          startIndex: -1,
+          endIndex: -1,
+          suggestedText: "LIMITATION OF LIABILITY: Neither party shall be liable for indirect, incidental, or consequential damages. Total liability shall not exceed the amount paid under this agreement."
+        }
+      ];
+
+      const mockDocument: ExtractedDocument = {
+        id: Date.now().toString(),
+        fileName: uploadedFile.name,
+        fullText: mockExtractedText,
+        sections: [
+          {
+            id: "sec-1",
+            title: "Parties",
+            content: "This Agreement is made between ABC Corp and XYZ Services.",
+            startIndex: 20,
+            endIndex: 85,
+            hasGaps: true,
+            gapIds: ["gap-1"]
+          },
+          {
+            id: "sec-2",
+            title: "Scope of Services",
+            content: "Provider will deliver consulting services as needed.",
+            startIndex: 120,
+            endIndex: 170,
+            hasGaps: true,
+            gapIds: ["gap-2"]
+          }
+        ],
+        gaps: mockGaps,
+        overallScore: 45,
+        templateId: selectedTemplate.id
+      };
+
+      setExtractedDocument(mockDocument);
+      setEditedText(mockExtractedText);
+      setCurrentStep(3);
+    } catch (error) {
+      console.error('Document extraction failed:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const highlightGaps = (text: string, gaps: DocumentGap[]) => {
+    if (!gaps.length) return text;
+    
+    let highlightedText = text;
+    const sortedGaps = [...gaps].sort((a, b) => b.startIndex - a.startIndex);
+    
+    sortedGaps.forEach(gap => {
+      if (gap.startIndex >= 0 && gap.endIndex >= 0) {
+        const config = severityConfig[gap.severity];
+        const before = highlightedText.substring(0, gap.startIndex);
+        const highlighted = highlightedText.substring(gap.startIndex, gap.endIndex);
+        const after = highlightedText.substring(gap.endIndex);
+        
+        highlightedText = `${before}<span class="${config.highlight} ${config.text} px-1 rounded cursor-pointer" title="${gap.description}">${highlighted}</span>${after}`;
+      }
+    });
+    
+    return highlightedText;
+  };
+
+  const handleSaveDocument = async () => {
+    // Mock save functionality + create a review entry
+    if (!uploadedFile) {
+      setCurrentStep(4);
+      return;
+    }
+    const newReview: ContractReview = {
+      id: Date.now().toString(),
+      fileName: uploadedFile.name,
+      contractType: selectedContractTypes.map(id => contractTypes.find(t => t.id === id)?.name).join(", ") || "Unknown",
+      status: "completed",
+      riskLevel: ["low", "medium", "high"][Math.floor(Math.random() * 3)] as "low" | "medium" | "high",
+      score: extractedDocument?.overallScore ?? Math.floor(Math.random() * 40) + 60,
+      gaps: extractedDocument ? extractedDocument.gaps.map(g => g.description) : ["No gaps available"],
+      suggestions: extractedDocument ? extractedDocument.gaps.map(g => g.recommendation) : [],
+      reviewer: "AI Legal Agent",
+      uploadDate: new Date().toISOString().split('T')[0]
+    };
+    setReviews([newReview, ...reviews]);
+    setCurrentStep(4);
+  };
+
+  const downloadDocument = (format: 'docx' | 'pdf') => {
+    // Mock download functionality
+    const blob = new Blob([editedText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${uploadedFile?.name || 'contract'}.${format === 'docx' ? 'docx' : 'pdf'}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleAnalyze = async () => {
     if (!uploadedFile) return;
@@ -195,6 +706,7 @@ export default function ContractReviewPage() {
   const canProceedToStep2 = selectedContractTypes.length > 0;
   const canProceedToStep3 = uploadedFile !== null;
   const canAnalyze = selectedContractTypes.length > 0 && uploadedFile !== null;
+  const canExtract = !!selectedTemplate && uploadedFile !== null;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -270,111 +782,131 @@ export default function ContractReviewPage() {
       <Card className="min-h-[600px]">
         <CardContent className="p-10">
 
-          {/* Step 1: Select Contract Type */}
+          {/* Step 1: Select Template from Knowledge Base */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              {/* Search and Filter Controls */}
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="flex flex-col sm:flex-row gap-3 flex-1">
-                  {/* Search Box */}
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search contract types..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  
-                  {/* Filter Dropdown */}
-                  <div className="relative">
-                    <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <select
-                      value={selectedFilter}
-                      onChange={(e) => setSelectedFilter(e.target.value)}
-                      className="pl-10 pr-8 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                    >
-                      {filterCategories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
+              <div className="text-center mb-8">
+                <Library className="h-16 w-16 text-primary mx-auto mb-4" />
+                <h3 className="text-2xl font-bold mb-2">Knowledge Base Templates</h3>
+                <p className="text-muted-foreground max-w-2xl mx-auto">
+                  Select a baseline template that has been reviewed and approved by legal experts. 
+                  Your uploaded contract will be compared against this template to identify gaps and weaknesses.
+                </p>
+              </div>
+
+              <div className="relative">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-sm text-muted-foreground">{knowledgeBaseTemplates.length} templates</div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="icon" onClick={() => scrollTemplates('left')} aria-label="Scroll left">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={() => scrollTemplates('right')} aria-label="Scroll right">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
 
-                {/* Clear All Button */}
-                {selectedContractTypes.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedContractTypes([])}
-                    className="shrink-0"
-                  >
-                    Clear All ({selectedContractTypes.length})
-                  </Button>
-                )}
-              </div>
-
-              {/* Results Info */}
-              <div className="flex justify-between items-center text-sm text-muted-foreground">
-                <span>
-                  {filteredContractTypes.length} contract type{filteredContractTypes.length !== 1 ? 's' : ''} 
-                  {searchTerm || selectedFilter !== "all" ? " found" : " available"}
-                </span>
-                {selectedContractTypes.length > 0 && (
-                  <span className="font-medium">
-                    {selectedContractTypes.length} selected
-                  </span>
-                )}
-              </div>
-
-              {/* Contract Types Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto p-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {filteredContractTypes.map((type) => (
-                  <Card
-                    key={type.id}
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      selectedContractTypes.includes(type.id) ? "ring-2 ring-primary bg-primary/5" : ""
-                    }`}
-                    onClick={() => handleContractTypeToggle(type.id)}
-                  >
-                    <CardContent className="p-4 text-center relative min-h-[120px] flex flex-col justify-center">
-                      {selectedContractTypes.includes(type.id) && (
-                        <div className="absolute top-2 right-2">
-                          <CheckCircle className="h-4 w-4 text-primary" />
-                        </div>
-                      )}
-                      <div className="absolute top-2 left-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 hover:bg-primary/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(`/contract-templates/${type.id}`, '_blank');
-                          }}
+                <div
+                  ref={templatesContainerRef}
+                  className="overflow-x-auto overflow-y-hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                >
+                  <div className="flex gap-4 pr-2">
+                    {knowledgeBaseTemplates.map((template) => {
+                      const selected = selectedTemplate?.id === template.id;
+                      const dimNonSelected = !!selectedTemplate && !selected;
+                      return (
+                        <Card
+                          key={template.id}
+                          className={`min-w-[300px] max-w-[300px] cursor-pointer transition-all border-2 ${
+                            selected ? 'border-primary bg-primary/5 shadow-lg' : 'border-muted hover:border-primary/50'
+                          } ${dimNonSelected ? 'opacity-80' : ''}`}
+                          onClick={() => handleTemplateSelect(template)}
                         >
-                          <Info className="h-3 w-3 text-muted-foreground hover:text-primary" />
-                        </Button>
-                      </div>
-                      <type.icon className="h-8 w-8 mx-auto mb-3 text-primary" />
-                      <h3 className="font-bold text-sm mb-1">{type.name}</h3>
-                    </CardContent>
-                  </Card>
-                ))}
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <BookOpen className="h-8 w-8 text-primary" />
+                              {template.isBaseline && (
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                                  <Award className="h-3 w-3 mr-1" />
+                                  Baseline
+                                </Badge>
+                              )}
+                            </div>
+                            <CardTitle className="text-lg truncate" title={template.name}>{template.name}</CardTitle>
+                            <CardDescription className="overflow-hidden text-ellipsis whitespace-nowrap" title={template.description}>{template.description}</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3">
+                              <div className="text-sm text-muted-foreground">
+                                <strong>Sections:</strong> {template.sections.length}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                <strong>Sources:</strong> {template.sources.join(', ')}
+                              </div>
+                              {template.sections.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {template.sections.slice(0, 3).map((section) => (
+                                    <Badge key={section.id} variant="outline" className="text-xs">
+                                      {section.title}
+                                    </Badge>
+                                  ))}
+                                  {template.sections.length > 3 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{template.sections.length - 3} more
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
-              {/* No Results Message */}
-              {filteredContractTypes.length === 0 && (
-                <div className="text-center py-8">
-                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-1">No contract types found</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Try adjusting your search or filter criteria
-                  </p>
-                </div>
+              {selectedTemplate && (
+                <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                      <Info className="h-5 w-5" />
+                      Selected Template: {selectedTemplate.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="font-semibold mb-2 text-blue-900 dark:text-blue-100">Required Sections:</h4>
+                        <ul className="space-y-1">
+                          {selectedTemplate.sections.filter(s => s.isRequired).map((section) => (
+                            <li key={section.id} className="flex items-center gap-2 text-sm">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <span>{section.title}</span>
+                              <Badge className={`text-xs ${
+                                section.priority === 'critical' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                                section.priority === 'high' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300' :
+                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+                              }`}>
+                                {section.priority}
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold mb-2 text-blue-900 dark:text-blue-100">What We'll Check:</h4>
+                        <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
+                          <li>• Missing required sections</li>
+                          <li>• Weak or incomplete clauses</li>
+                          <li>• Non-compliant language</li>
+                          <li>• Risk exposure areas</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </div>
           )}
@@ -382,43 +914,76 @@ export default function ContractReviewPage() {
           {/* Step 2: Upload Contract */}
           {currentStep === 2 && (
             <div className="space-y-8">
-              <div className="relative group">
-                <div className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-16 text-center transition-all duration-300 hover:border-primary/50 hover:bg-primary/5 group-hover:scale-[1.02]">
-                  <div className="transition-transform duration-300 group-hover:scale-110">
-                    <Upload className="h-20 w-20 mx-auto mb-6 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+              {/* Upload Options */}
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Upload New File */}
+                <div className="relative group">
+                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center transition-all duration-300 hover:border-primary/50 hover:bg-primary/5 group-hover:scale-[1.02]">
+                    <div className="transition-transform duration-300 group-hover:scale-110">
+                      <Upload className="h-16 w-16 mx-auto mb-4 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-xl font-semibold text-foreground">Upload New File</p>
+                      <p className="text-muted-foreground">
+                        Drop your file here or click to browse
+                      </p>
+                      <div className="flex justify-center items-center gap-2 text-sm text-muted-foreground">
+                        <FileText className="h-4 w-4" />
+                        <span>PDF</span>
+                        <span>•</span>
+                        <span>DOC</span>
+                        <span>•</span>
+                        <span>DOCX</span>
+                      </div>
+                    </div>
+                    <div className="mt-6">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="relative overflow-hidden transition-all duration-300 hover:scale-105"
+                        onClick={() => document.getElementById('file-upload')?.click()}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Choose File
+                      </Button>
+                    </div>
+                    <Input
+                      id="file-upload"
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleFileUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
                   </div>
-                  <div className="space-y-3">
-                    <p className="text-2xl font-semibold text-foreground">Drop your file here or click to browse</p>
-                    <p className="text-muted-foreground text-lg">
-                      Supports PDF, DOC, DOCX files up to 10MB
-                    </p>
-                    <div className="flex justify-center items-center gap-2 text-sm text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      <span>PDF</span>
-                      <span>•</span>
-                      <span>DOC</span>
-                      <span>•</span>
-                      <span>DOCX</span>
+                </div>
+
+                {/* Select from Assets */}
+                <div className="relative group">
+                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center transition-all duration-300 hover:border-primary/50 hover:bg-primary/5 group-hover:scale-[1.02]">
+                    <div className="transition-transform duration-300 group-hover:scale-110">
+                      <FolderOpen className="h-16 w-16 mx-auto mb-4 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-xl font-semibold text-foreground">Select from Assets</p>
+                      <p className="text-muted-foreground">
+                        Choose from your uploaded documents
+                      </p>
+                      <div className="text-sm text-muted-foreground">
+                        Access your previously uploaded files
+                      </div>
+                    </div>
+                    <div className="mt-6">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="relative overflow-hidden transition-all duration-300 hover:scale-105"
+                        onClick={() => setIsAssetPickerOpen(true)}
+                      >
+                        <FolderOpen className="h-4 w-4 mr-2" />
+                        Browse Assets
+                      </Button>
                     </div>
                   </div>
-                  <div className="mt-8">
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="relative overflow-hidden transition-all duration-300 hover:scale-105"
-                      onClick={() => document.getElementById('file-upload')?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Choose File
-                    </Button>
-                  </div>
-                  <Input
-                    id="file-upload"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
                 </div>
               </div>
 
@@ -471,12 +1036,14 @@ export default function ContractReviewPage() {
                       <div className="space-y-2">
                         {selectedContractTypes.map(typeId => {
                           const selectedType = contractTypes.find(t => t.id === typeId);
-                          return selectedType ? (
+                          if (!selectedType) return null;
+                          const Icon = selectedType.icon;
+                          return (
                             <div key={typeId} className="flex items-center gap-3">
-                              <selectedType.icon className="h-5 w-5 text-primary" />
+                              <Icon className="h-5 w-5 text-primary" />
                               <span className="text-sm font-bold">{selectedType.name}</span>
                             </div>
-                          ) : null;
+                          );
                         })}
                       </div>
                     ) : (
@@ -530,6 +1097,60 @@ export default function ContractReviewPage() {
                   </div>
                 </div>
               )}
+
+              {/* Extracted text with highlighted gaps */}
+              {extractedDocument && (
+                <div className="grid md:grid-cols-2 gap-8">
+                  <Card className="overflow-hidden">
+                    <CardHeader>
+                      <CardTitle className="text-lg font-bold">Extracted Text (Highlighted)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="prose dark:prose-invert max-w-none border rounded-md p-4" dangerouslySetInnerHTML={{ __html: highlightGaps(extractedDocument.fullText, extractedDocument.gaps) }} />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg font-bold">Identified Gaps</CardTitle>
+                        <Button variant="outline" size="sm" onClick={acceptAllSuggestions} disabled={!extractedDocument.gaps.length}>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Accept All
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {extractedDocument.gaps.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No gaps detected.</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {extractedDocument.gaps.map((gap) => {
+                            const cfg = severityConfig[gap.severity];
+                            return (
+                              <div key={gap.id} className={`rounded-md border p-4 ${cfg.border} ${cfg.bg}`}>
+                                <div className="flex items-center justify-between">
+                                  <div className={`text-sm font-bold capitalize ${cfg.text}`}>{gap.severity} • {gap.gapType.replace('-', ' ')}</div>
+                                  {gap.suggestedText && (
+                                    <Button size="sm" variant="secondary" onClick={() => applyGapSuggestion(gap)}>
+                                      Apply Suggestion
+                                    </Button>
+                                  )}
+                                </div>
+                                <div className="mt-2 text-sm">
+                                  <div className="font-semibold">{gap.sectionTitle}</div>
+                                  <div className="mt-1 text-foreground">{gap.description}</div>
+                                  <div className="mt-2 text-muted-foreground text-xs">Recommendation: {gap.recommendation}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
@@ -578,23 +1199,67 @@ export default function ContractReviewPage() {
                         <Progress value={review.score} className="h-3" />
                       </div>
 
-                      <div className="grid md:grid-cols-2 gap-6">
+                      {/* Severity Overview */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {(() => {
+                          const counts = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>;
+                          // Prefer extractedDocument counts if available
+                          if (extractedDocument?.gaps) {
+                            extractedDocument.gaps.forEach(g => counts[g.severity] = (counts[g.severity] || 0) + 1);
+                          }
+                          const tiles = [
+                            { key: 'critical', label: 'Critical Issues', color: 'bg-red-600', icon: AlertTriangle },
+                            { key: 'high', label: 'High Priority', color: 'bg-orange-600', icon: AlertTriangle },
+                            { key: 'medium', label: 'Medium Risk', color: 'bg-amber-600', icon: FileText },
+                            { key: 'low', label: 'Low Priority', color: 'bg-green-600', icon: CheckCircle },
+                          ];
+                          return tiles.map(({ key, label, color, icon: Icon }) => (
+                            <div key={key} className={`rounded-xl p-4 text-white shadow-md ${color}`}>
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="text-2xl font-extrabold leading-none">{counts[key] || 0}</div>
+                                  <div className="text-sm font-semibold opacity-95 mt-1">{label}</div>
+                                </div>
+                                <Icon className="h-5 w-5 opacity-90" />
+                              </div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+
+                      {/* Issues and Suggestions stacked vertically */}
+                      <div className="space-y-6 mt-4">
                         {review.gaps.length > 0 && (
                           <Card>
                             <CardHeader>
-                              <CardTitle className="text-lg flex items-center gap-2">
-                                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                                Identified Gaps
+                              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                                <AlertTriangle className="h-5 w-5 text-red-600" />
+                                Issues
                               </CardTitle>
                             </CardHeader>
                             <CardContent>
-                              <ul className="space-y-2">
-                                {review.gaps.map((gap, index) => (
-                                  <li key={index} className="text-sm flex items-start gap-2">
-                                    <span className="text-yellow-600 mt-1">•</span>
-                                    {gap}
-                                  </li>
-                                ))}
+                              <ul className="space-y-3">
+                                {extractedDocument?.gaps && extractedDocument.gaps.length > 0 ? (
+                                  extractedDocument.gaps.map((g) => {
+                                    const color = g.severity === 'critical' ? 'bg-red-600' : g.severity === 'high' ? 'bg-orange-600' : g.severity === 'medium' ? 'bg-amber-600' : 'bg-green-600';
+                                    return (
+                                      <li key={g.id} className="rounded-lg overflow-hidden">
+                                        <div className={`${color} text-white px-3 py-1 text-xs font-bold uppercase tracking-wide`}>{g.severity}</div>
+                                        <div className="p-3 border border-t-0 rounded-b-lg">
+                                          <div className="text-sm font-semibold">{g.sectionTitle} • {g.gapType.replace('-', ' ')}</div>
+                                          <div className="text-sm text-muted-foreground mt-1">{g.description}</div>
+                                        </div>
+                                      </li>
+                                    );
+                                  })
+                                ) : (
+                                  review.gaps.map((gap, index) => (
+                                    <li key={index} className="text-sm flex items-start gap-2">
+                                      <span className="text-red-600 mt-1">•</span>
+                                      {gap}
+                                    </li>
+                                  ))
+                                )}
                               </ul>
                             </CardContent>
                           </Card>
@@ -603,9 +1268,9 @@ export default function ContractReviewPage() {
                         {review.suggestions.length > 0 && (
                           <Card>
                             <CardHeader>
-                              <CardTitle className="text-lg flex items-center gap-2">
+                              <CardTitle className="text-lg font-bold flex items-center gap-2">
                                 <CheckCircle className="h-5 w-5 text-green-600" />
-                                Suggestions for Improvement
+                                Suggestions
                               </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -666,10 +1331,10 @@ export default function ContractReviewPage() {
         </Button>
 
         <div className="flex gap-2">
-          {currentStep === 3 && (
+          {currentStep === 3 && !extractedDocument && (
             <Button
-              onClick={handleAnalyze}
-              disabled={!canAnalyze || isAnalyzing}
+              onClick={handleDocumentExtraction}
+              disabled={!canExtract || isAnalyzing}
               className="flex items-center gap-2"
             >
               {isAnalyzing ? (
@@ -680,9 +1345,20 @@ export default function ContractReviewPage() {
               ) : (
                 <>
                   <FileText className="h-4 w-4" />
-                  Analyze Contract
+                  Extract & Analyze
                 </>
               )}
+            </Button>
+          )}
+
+          {currentStep === 3 && extractedDocument && (
+            <Button
+              onClick={handleSaveDocument}
+              disabled={isAnalyzing}
+              className="flex items-center gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Save & Generate Results
             </Button>
           )}
 
@@ -701,6 +1377,15 @@ export default function ContractReviewPage() {
           )}
         </div>
       </div>
+
+      {/* Asset Picker Modal */}
+      <AssetPicker
+        isOpen={isAssetPickerOpen}
+        onClose={() => setIsAssetPickerOpen(false)}
+        onSelect={handleAssetSelect}
+        title="Select Contract Document"
+        description="Choose a document from your assets to review"
+      />
     </div>
   );
 }
