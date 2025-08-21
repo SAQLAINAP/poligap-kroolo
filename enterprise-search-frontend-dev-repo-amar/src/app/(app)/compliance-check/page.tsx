@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
-import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus, History, Calendar, TrendingDown, TrendingUp as TrendingUpIcon } from "lucide-react";
+import Link from "next/link";
 import { AssetPicker } from "@/components/AssetPicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ComplianceStandard {
   id: string;
@@ -39,6 +41,22 @@ interface ComplianceResult {
   suggestions: string[];
   uploadDate: string;
   detailedAnalysis?: any;
+}
+
+interface AuditLog {
+  _id: string;
+  fileName: string;
+  standards: string[];
+  score: number;
+  status: 'compliant' | 'non-compliant' | 'partial';
+  gapsCount: number;
+  analysisDate: string;
+  fileSize: number;
+  analysisMethod?: string;
+  snapshot?: {
+    gaps?: ComplianceGap[];
+    suggestions?: string[];
+  };
 }
 
 const complianceStandards: ComplianceStandard[] = [
@@ -367,6 +385,10 @@ export default function ComplianceCheckPage() {
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [analysisMethod, setAnalysisMethod] = useState<string>("");
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState<string>("all");
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
+  const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
 
   const steps = [
     { id: 1, title: "Select Standards", description: "Choose compliance standards" },
@@ -399,12 +421,78 @@ export default function ComplianceCheckPage() {
 
   const handleStandardToggle = (standardId: string) => {
     setSelectedStandards(prev => {
-      if (prev.includes(standardId)) {
-        return prev.filter(id => id !== standardId);
+      const newStandards = prev.includes(standardId)
+        ? prev.filter(id => id !== standardId)
+        : [...prev, standardId];
+      
+      // Fetch audit logs when standards change
+      if (newStandards.length > 0) {
+        fetchAuditLogs(newStandards);
       } else {
-        return [...prev, standardId];
+        setAuditLogs([]);
       }
+      
+      return newStandards;
     });
+  };
+
+  const fetchAuditLogs = async (standards: string[]) => {
+    if (standards.length === 0) return;
+    
+    setIsLoadingLogs(true);
+    try {
+      const response = await fetch(`/api/audit-logs?standards=${standards.join(',')}&limit=20`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setAuditLogs(data.logs);
+      }
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const saveAuditLog = async (result: ComplianceResult) => {
+    try {
+      const auditLogData = {
+        fileName: result.fileName,
+        standards: selectedStandards,
+        score: result.score,
+        status: result.status,
+        gapsCount: result.gaps.length,
+        fileSize: uploadedFile?.size || 0,
+        analysisMethod: analysisMethod || 'standard',
+        snapshot: {
+          gaps: result.gaps,
+          suggestions: result.suggestions,
+          fullResult: result,
+        }
+      };
+
+      const resp = await fetch('/api/audit-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(auditLogData)
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        console.error('Failed to save audit log', err);
+      } else {
+        const json = await resp.json().catch(() => null);
+        console.debug('Saved audit log snapshot', {
+          gaps: auditLogData.snapshot?.gaps?.length || 0,
+          suggestions: auditLogData.snapshot?.suggestions?.length || 0,
+          id: json?.id
+        });
+      }
+      
+      // Refresh audit logs after saving
+      fetchAuditLogs(selectedStandards);
+    } catch (error) {
+      console.error('Error saving audit log:', error);
+    }
   };
 
   const handleAnalyze = async () => {
@@ -526,6 +614,10 @@ export default function ComplianceCheckPage() {
       };
 
       setResults([newResult]);
+      
+      // Save audit log
+      await saveAuditLog(newResult);
+      
       setCurrentStep(4);
     } catch (error) {
       console.error('Analysis error:', error);
@@ -589,7 +681,10 @@ export default function ComplianceCheckPage() {
   const canAnalyze = selectedStandards.length > 0 && uploadedFile !== null;
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-6 space-y-8">
+    <div className="w-full mx-auto p-6 space-y-8">
+      <div className={`flex gap-6 ${selectedStandards.length > 0 ? 'max-w-none' : 'max-w-6xl mx-auto'}`}>
+        {/* Main Content */}
+        <div className={`${selectedStandards.length > 0 ? 'flex-1' : 'w-full'} space-y-8`}>
       {/* Header */}
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-foreground flex items-center justify-center gap-2">
@@ -1144,6 +1239,117 @@ export default function ComplianceCheckPage() {
         </div>
       )}
 
+        </div>
+
+        {/* Audit Logs Sidebar */}
+        {selectedStandards.length > 0 && (
+          <div className="w-80 flex-shrink-0">
+            <Card className="h-fit sticky top-6">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  Audit Logs
+                </CardTitle>
+                <CardDescription>
+                  Historical analyses for selected standards
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isLoadingLogs ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  </div>
+                ) : auditLogs.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No previous analyses found for selected standards</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {auditLogs.map((log) => {
+                      const logDate = new Date(log.analysisDate);
+                      const isRecent = Date.now() - logDate.getTime() < 24 * 60 * 60 * 1000;
+                      
+                      return (
+                        <Card
+                          key={log._id}
+                          className={`p-3 cursor-pointer hover:shadow-md transition-shadow ${isRecent ? 'bg-blue-50 border-blue-200' : ''}`}
+                          onClick={() => { setSelectedAuditLog(log); setIsLogDialogOpen(true); }}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate" title={log.fileName}>
+                                  {log.fileName}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge className={getStatusColor(log.status)} variant="secondary">
+                                    {log.status}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {log.score}%
+                                  </span>
+                                </div>
+                              </div>
+                              {isRecent && (
+                                <Badge variant="outline" className="text-xs">
+                                  New
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {logDate.toLocaleDateString()}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                {log.gapsCount} issues
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-1">
+                              {log.standards.slice(0, 2).map((standard) => (
+                                <Badge key={standard} variant="outline" className="text-xs">
+                                  {standard.toUpperCase()}
+                                </Badge>
+                              ))}
+                              {log.standards.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{log.standards.length - 2}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="ml-2">
+                              <Link href={`/history?logId=${log._id}`} onClick={(e)=>e.stopPropagation()}>
+                                <Button variant="ghost" size="icon" title="Open full report in History">
+                                  <Info className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </div>
+                            
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {auditLogs.length > 0 && (
+                  <div className="pt-3 border-t">
+                    <Button variant="outline" size="sm" className="w-full">
+                      <Eye className="h-4 w-4 mr-2" />
+                      View All History
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+
       {/* Asset Picker Modal */}
       <AssetPicker
         isOpen={isAssetPickerOpen}
@@ -1153,6 +1359,104 @@ export default function ComplianceCheckPage() {
         title="Select Document"
         description="Choose a document from your assets for compliance analysis"
       />
+
+      {/* Audit Log Details Dialog */}
+      <Dialog open={isLogDialogOpen} onOpenChange={setIsLogDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Audit Details
+            </DialogTitle>
+            <DialogDescription>
+              Review the historical compliance result snapshot
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAuditLog && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="font-semibold">{selectedAuditLog.fileName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(selectedAuditLog.analysisDate).toLocaleString()} • {selectedAuditLog.standards.map(s => s.toUpperCase()).join(', ')}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={getStatusColor(selectedAuditLog.status)}>{selectedAuditLog.status}</Badge>
+                  <Badge variant="outline">{selectedAuditLog.score}%</Badge>
+                </div>
+              </div>
+
+              {/* Redirect Tabs to History */}
+              <div className="flex items-center gap-2">
+                <Link href={`/history?logId=${selectedAuditLog._id}&tab=issues`}>
+                  <Button size="sm" variant="secondary">Open Full Issues</Button>
+                </Link>
+                <Link href={`/history?logId=${selectedAuditLog._id}&tab=suggestions`}>
+                  <Button size="sm" variant="secondary">Open Full Suggestions</Button>
+                </Link>
+              </div>
+
+              {/* Gaps */}
+              <div>
+                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Issues ({selectedAuditLog.gapsCount})
+                </h4>
+                {selectedAuditLog.snapshot?.gaps && selectedAuditLog.snapshot.gaps.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {selectedAuditLog.snapshot.gaps.map((gap) => {
+                      const cfg = priorityConfig[gap.priority as keyof typeof priorityConfig];
+                      const IconComponent = cfg.icon;
+                      return (
+                        <Card key={gap.id} className={`${cfg.color}`}>
+                          <CardContent className="p-3">
+                            <div className="flex items-start gap-2">
+                              <IconComponent className={`h-4 w-4 ${cfg.iconColor} mt-0.5`} />
+                              <div>
+                                <div className="text-sm font-semibold">{gap.title}</div>
+                                <div className="text-xs text-muted-foreground">{gap.description}</div>
+                              </div>
+                              <div className="ml-auto">
+                                <Badge className={`${cfg.badgeColor} text-xs`}>{cfg.label}</Badge>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No snapshot of issues stored for this audit.</p>
+                )}
+              </div>
+
+              {/* Suggestions */}
+              <div>
+                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  Suggestions
+                </h4>
+                {selectedAuditLog.snapshot?.suggestions && selectedAuditLog.snapshot.suggestions.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    {selectedAuditLog.snapshot.suggestions.map((s, idx) => (
+                      <li key={idx}>{s}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No suggestions snapshot stored.</p>
+                )}
+              </div>
+
+          </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLogDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

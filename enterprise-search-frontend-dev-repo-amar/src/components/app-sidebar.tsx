@@ -11,6 +11,7 @@ import {
   Settings,
   Home,
   Upload,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +42,7 @@ type PageType =
   | "contract-review"
   | "ai-agents"
   | "upload-assets"
+  | "history"
   | "settings";
 
 const navigationItems = [
@@ -73,6 +75,11 @@ const navigationItems = [
     title: "Upload Assets",
     icon: Upload,
     page: "/upload-assets" as PageType,
+  },
+  {
+    title: "History",
+    icon: History,
+    page: "/history" as PageType,
   },
 ];
 
