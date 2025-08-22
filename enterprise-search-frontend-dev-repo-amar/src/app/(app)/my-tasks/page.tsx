@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CheckSquare, Plus, Calendar, User, Filter } from "lucide-react";
+import { CheckSquare, Plus, Filter, Check, RotateCcw, Trash2, Shield, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,24 @@ export default function MyTasksPage() {
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
+
+  // Extract only the suggested fix from mixed descriptions like
+  // "<issue details>. Recommended: <fix text>" or "Suggested fix: <fix text>".
+  const getSuggestedFix = (text?: string) => {
+    if (!text) return "";
+    const lower = text.toLowerCase();
+    const keys = ["recommended:", "recommendation:", "suggested fix:", "suggestion:"];
+    for (const k of keys) {
+      const idx = lower.indexOf(k);
+      if (idx !== -1) {
+        return text.slice(idx + k.length).trim();
+      }
+    }
+    // Fallback: if no marker found, return the original text
+    return text;
+  };
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [newTaskSource, setNewTaskSource] = useState<"manual" | "compliance" | "contract">("manual");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all"); // status
@@ -84,6 +101,14 @@ export default function MyTasksPage() {
     return matchesSearch;
   });
 
+  const getSourceStyle = (source?: string) => {
+    switch (source) {
+      case "compliance": return { bar: "border-l-8 border-blue-500", pill: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300", icon: <Shield className="h-3.5 w-3.5" /> };
+      case "contract": return { bar: "border-l-8 border-purple-500", pill: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300", icon: <FileText className="h-3.5 w-3.5" /> };
+      default: return { bar: "border-l-8 border-gray-400", pill: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300", icon: <CheckSquare className="h-3.5 w-3.5" /> };
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
@@ -116,20 +141,37 @@ export default function MyTasksPage() {
           status: 'pending',
           priority: 'medium',
           dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
-          assignee: 'You',
           category: 'General',
-          source: 'manual'
+          source: newTaskSource
         })
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create task');
       setNewTaskTitle("");
       setNewTaskDescription("");
+      setNewTaskSource('manual');
       setShowNewTaskForm(false);
       await loadTasks();
     } catch (e) {
       console.error('Create task failed', e);
     }
+  };
+
+  const updateTask = async (task: Task, updates: Partial<Task>) => {
+    const id = task._id || task.id;
+    if (!id) return;
+    await fetch('/api/tasks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, updates })
+    }).then(() => loadTasks());
+  };
+
+  const deleteTask = async (task: Task) => {
+    const id = task._id || task.id;
+    if (!id) return;
+    await fetch(`/api/tasks?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .then(() => loadTasks());
   };
 
   return (
@@ -217,6 +259,19 @@ export default function MyTasksPage() {
                 placeholder="Enter task description..."
               />
             </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Task Type</label>
+              <Select value={newTaskSource} onValueChange={(v: any) => setNewTaskSource(v)}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="compliance">Compliance Gap</SelectItem>
+                  <SelectItem value="contract">Contract Review</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2">
               <Button onClick={createTask} disabled={!newTaskTitle.trim()}>
                 Create Task
@@ -227,6 +282,7 @@ export default function MyTasksPage() {
                   setShowNewTaskForm(false);
                   setNewTaskTitle("");
                   setNewTaskDescription("");
+                  setNewTaskSource('manual');
                 }}
               >
                 Cancel
@@ -269,45 +325,52 @@ export default function MyTasksPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4">
-              {filteredTasks.map((task) => (
-                <Card key={task._id || task.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">{task.title}</CardTitle>
-                        <CardDescription>{task.description}</CardDescription>
-                      </div>
-                      <div className="flex gap-2">
-                        <Badge className={getPriorityColor(task.priority)}>
-                          {task.priority}
-                        </Badge>
-                        <Badge className={getStatusColor(task.status)}>
-                          {task.status.replace("-", " ")}
-                        </Badge>
-                        {task.source && (
-                          <Badge variant="outline">{task.source}</Badge>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          <span>Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "—"}</span>
+            <div className="grid gap-3">
+              {filteredTasks.map((task) => {
+                const s = getSourceStyle(task.source);
+                const idKey = task._id || task.id;
+                return (
+                  <Card key={idKey} className={`hover:shadow-md transition-shadow ${s.bar}`}>
+                    <CardHeader className="py-0.5">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-0">
+                          <div className="flex items-center gap-1">
+                            <div className={`px-1.5 py-0.5 rounded-full text-[10px] flex items-center gap-1 ${s.pill}`}>
+                              {s.icon}
+                              <span className="capitalize">{task.source || 'manual'}</span>
+                            </div>
+                            <Badge className={`${getPriorityColor(task.priority)} text-[10px] px-1.5 py-0.5`}>{task.priority}</Badge>
+                            <Badge className={`${getStatusColor(task.status)} text-[10px] px-1.5 py-0.5`}>{task.status.replace("-"," ")}</Badge>
+                          </div>
+                          <CardTitle className="text-base font-semibold leading-tight line-clamp-1 mt-0 mb-0">{task.title}</CardTitle>
+                          <CardDescription className="text-sm leading-tight line-clamp-2 mt-0 mb-0">{getSuggestedFix(task.description)}</CardDescription>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <User className="h-4 w-4" />
-                          <span>{task.assignee || "Unassigned"}</span>
+                        <div className="flex flex-col items-end gap-1 min-w-[84px]">
+                          <div className="flex items-center gap-1">
+                          {task.status !== 'completed' ? (
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => updateTask(task, { status: 'completed' })} title="Mark as complete">
+                              <Check className="h-4 w-4" />
+                              <span className="sr-only">Complete</span>
+                            </Button>
+                          ) : (
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => updateTask(task, { status: 'pending' })} title="Mark as pending">
+                              <RotateCcw className="h-4 w-4" />
+                              <span className="sr-only">Pending</span>
+                            </Button>
+                          )}
+                          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => deleteTask(task)} title="Delete task">
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">{task.category || "General"}</Badge>
                         </div>
                       </div>
-                      <Badge variant="outline">{task.category || "General"}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                    
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
