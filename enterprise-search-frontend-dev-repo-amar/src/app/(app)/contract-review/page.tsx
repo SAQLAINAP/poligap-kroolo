@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { FileText, Upload, Eye, Download, AlertTriangle, CheckCircle, Clock, User, ChevronRight, ChevronLeft, Building, Users, Shield, Handshake, Award, Home, TrendingUp, Car, ShoppingCart, Truck, Crown, Network, Search, Filter, Briefcase, Globe, Heart, Zap, Wifi, Database, Code, Palette, Music, Camera, Plane, Ship, Factory, Hammer, Wrench, Cog, Book, GraduationCap, Stethoscope, Scale, Gavel, DollarSign, CreditCard, PiggyBank, Landmark, Info, FolderOpen, BookOpen, Library, Edit3, RotateCcw, Save, X } from "lucide-react";
+import { FileText, Upload, Eye, Download, AlertTriangle, CheckCircle, Clock, User, ChevronRight, ChevronLeft, Building, Users, Shield, Handshake, Award, Home, TrendingUp, Car, ShoppingCart, Truck, Crown, Network, Search, Filter, Briefcase, Globe, Heart, Zap, Wifi, Database, Code, Palette, Music, Camera, Plane, Ship, Factory, Hammer, Wrench, Cog, Book, GraduationCap, Stethoscope, Scale, Gavel, DollarSign, CreditCard, PiggyBank, Landmark, Info, FolderOpen, BookOpen, Library, Edit3, RotateCcw, Save, X, NotebookPen, FileUp } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { AssetPicker } from "@/components/AssetPicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ContractTemplate {
   id: string;
@@ -329,6 +330,14 @@ export default function ContractReview() {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  // New: template boilerplate mode and custom template upload state
+  const [templateMode, setTemplateMode] = useState<'standard' | 'knowledge'>('standard');
+  const [customTemplateName, setCustomTemplateName] = useState<string>("");
+  // New: allow free-form custom template text via notepad
+  const [customTemplateText, setCustomTemplateText] = useState<string>("");
+  const [isNotepadOpen, setIsNotepadOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   // Audit logs state for selected template
   const [templateLogs, setTemplateLogs] = useState<any[]>([]);
@@ -336,6 +345,8 @@ export default function ContractReview() {
   const [logsError, setLogsError] = useState<string | null>(null);
   
   const templatesContainerRef = useRef<HTMLDivElement>(null);
+  // Track any ongoing analysis timer to allow cleanup/cancel
+  const analyzeTimerRef = useRef<number | null>(null);
 
   const scrollTemplates = (direction: 'left' | 'right') => {
     const el = templatesContainerRef.current;
@@ -343,6 +354,40 @@ export default function ContractReview() {
     const amount = el.clientWidth * 0.8;
     el.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
   };
+
+  // New: custom template upload handler for Knowledge Base Templates mode
+  const handleCustomTemplateUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setCustomTemplateName(file.name);
+    }
+  };
+
+  // Drag & Drop handlers for custom template
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      setCustomTemplateName(file.name);
+    }
+  };
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+  const openFilePicker = () => fileInputRef.current?.click();
 
   // Fetch audit logs helper and effect on template change
   const reloadTemplateLogs = async () => {
@@ -370,6 +415,25 @@ export default function ContractReview() {
   useEffect(() => {
     reloadTemplateLogs();
   }, [selectedTemplate]);
+
+  // Cleanup on unmount: clear any pending timers and reset analyzing flag
+  useEffect(() => {
+    return () => {
+      if (analyzeTimerRef.current) {
+        clearTimeout(analyzeTimerRef.current);
+        analyzeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Clear any ongoing analysis when navigating away from Step 4
+  useEffect(() => {
+    if (currentStep !== 4 && analyzeTimerRef.current) {
+      clearTimeout(analyzeTimerRef.current);
+      analyzeTimerRef.current = null;
+      setIsAnalyzing(false);
+    }
+  }, [currentStep]);
 
 
   const contractTypes = [
@@ -449,6 +513,65 @@ export default function ContractReview() {
     }
   };
 
+  // Render fullText with gap highlights as HTML for Step 4 preview
+  const highlightGaps = (fullText: string, gaps: DocumentGap[]) => {
+    const escapeHtml = (s: string) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    if (!gaps || gaps.length === 0) {
+      return escapeHtml(fullText).replace(/\n/g, "<br/>");
+    }
+
+    const sorted = [...gaps]
+      .filter(g => g.startIndex >= 0 && g.endIndex >= g.startIndex)
+      .sort((a, b) => a.startIndex - b.startIndex);
+
+    let cursor = 0;
+    let html = "";
+    const safe = escapeHtml(fullText);
+
+    for (const g of sorted) {
+      const start = Math.max(0, Math.min(g.startIndex, fullText.length));
+      const end = Math.max(start, Math.min(g.endIndex, fullText.length));
+      // Append non-highlighted segment
+      html += safe.substring(cursor, start).replace(/\n/g, "<br/>");
+      // Highlighted segment
+      const seg = safe.substring(start, end).replace(/\n/g, "<br/>");
+      const sev = g.severity;
+      const bg = sev === 'critical' ? 'bg-red-200 dark:bg-red-800' : sev === 'high' ? 'bg-orange-200 dark:bg-orange-800' : sev === 'medium' ? 'bg-amber-200 dark:bg-amber-800' : 'bg-blue-200 dark:bg-blue-800';
+      html += `<span class="px-1 rounded ${bg}" title="${escapeHtml(g.sectionTitle)}: ${escapeHtml(g.description)}">${seg}</span>`;
+      cursor = end;
+    }
+    // Append remaining tail
+    html += safe.substring(cursor).replace(/\n/g, "<br/>");
+
+    // Append any missing-clause suggestions at the end for visibility
+    const missing = gaps.filter(g => g.startIndex < 0 || g.endIndex < 0);
+    if (missing.length) {
+      html += '<div class="mt-4 p-3 border rounded bg-muted">';
+      html += '<div class="font-bold mb-2">Missing Clauses</div>';
+      for (const m of missing) {
+        const sev = m.severity;
+        const color = sev === 'critical' ? 'text-red-700' : sev === 'high' ? 'text-orange-700' : sev === 'medium' ? 'text-amber-700' : 'text-blue-700';
+        html += `<div class="text-sm ${color}"><strong>${escapeHtml(m.sectionTitle)}</strong>: ${escapeHtml(m.description)}</div>`;
+      }
+      html += '</div>';
+    }
+
+    return html;
+  };
+
+  // Save on Step 4 and generate results -> triggers analyze flow
+  const handleSaveDocument = () => {
+    if (isAnalyzing) return;
+    void handleAnalyze();
+  };
+
   // Apply all suggestions
   const acceptAllSuggestions = () => {
     if (!extractedDocument) return;
@@ -485,9 +608,10 @@ export default function ContractReview() {
 
   const steps = [
     { id: 1, title: "Select Template", description: "Choose a baseline template from knowledge base" },
-    { id: 2, title: "Upload Contract", description: "Upload your contract document" },
-    { id: 3, title: "Review Document", description: "Review extracted text with highlighted gaps" },
-    { id: 4, title: "Make Corrections", description: "Edit and finalize the document" }
+    { id: 2, title: "Template Boilerplate", description: "Review format or provide your own template" },
+    { id: 3, title: "Upload Contract", description: "Upload your contract document" },
+    { id: 4, title: "Review & Analyze", description: "Review extracted text with highlighted gaps" },
+    { id: 5, title: "Make Corrections", description: "Edit and finalize the document" }
   ];
 
   const handleTemplateSelect = (template: ContractTemplate) => {
@@ -495,8 +619,15 @@ export default function ContractReview() {
   };
 
   const handleDocumentExtraction = async () => {
-    if (!uploadedFile || !selectedTemplate) return;
-
+    const hasTemplateContext = templateMode === 'standard'
+      ? !!selectedTemplate
+      : (!!customTemplateName || !!customTemplateText);
+    if (!uploadedFile || !hasTemplateContext) return;
+    // Ensure no stale analysis timers are running
+    if (analyzeTimerRef.current) {
+      clearTimeout(analyzeTimerRef.current);
+      analyzeTimerRef.current = null;
+    }
     setIsAnalyzing(true);
     try {
       // Mock document extraction and analysis
@@ -554,7 +685,7 @@ The parties agree to the terms herein.`;
       ];
 
       const mockDocument: ExtractedDocument = {
-        id: Date.now().toString(),
+        id: "doc-1",
         fileName: uploadedFile.name,
         fullText: mockExtractedText,
         sections: [
@@ -562,29 +693,38 @@ The parties agree to the terms herein.`;
             id: "sec-1",
             title: "Parties",
             content: "This Agreement is made between ABC Corp and XYZ Services.",
-            startIndex: 20,
-            endIndex: 85,
+            startIndex: 40,
+            endIndex: 100,
             hasGaps: true,
             gapIds: ["gap-1"]
           },
           {
             id: "sec-2",
-            title: "Scope of Services",
+            title: "Scope of Work",
             content: "Provider will deliver consulting services as needed.",
             startIndex: 120,
             endIndex: 170,
             hasGaps: true,
             gapIds: ["gap-2"]
+          },
+          {
+            id: "sec-3",
+            title: "Limitation of Liability",
+            content: "",
+            startIndex: -1,
+            endIndex: -1,
+            hasGaps: true,
+            gapIds: ["gap-3"]
           }
         ],
         gaps: mockGaps,
         overallScore: 45,
-        templateId: selectedTemplate.id
+        templateId: selectedTemplate?.id || 'custom'
       };
 
       setExtractedDocument(mockDocument);
       setEditedText(mockExtractedText);
-      setCurrentStep(3);
+      setCurrentStep(4);
     } catch (error) {
       console.error('Document extraction failed:', error);
     } finally {
@@ -592,131 +732,44 @@ The parties agree to the terms herein.`;
     }
   };
 
-  const highlightGaps = (text: string, gaps: DocumentGap[]) => {
-    if (!gaps.length) return text;
-    
-    let highlightedText = text;
-    const sortedGaps = [...gaps].sort((a, b) => b.startIndex - a.startIndex);
-    
-    sortedGaps.forEach(gap => {
-      if (gap.startIndex >= 0 && gap.endIndex >= 0) {
-        const config = severityConfig[gap.severity];
-        const before = highlightedText.substring(0, gap.startIndex);
-        const highlighted = highlightedText.substring(gap.startIndex, gap.endIndex);
-        const after = highlightedText.substring(gap.endIndex);
-        
-        highlightedText = `${before}<span class="${config.highlight} ${config.text} px-1 rounded cursor-pointer" title="${gap.description}">${highlighted}</span>${after}`;
-      }
-    });
-    
-    return highlightedText;
-  };
-
-  const handleSaveDocument = async () => {
-    // Mock save functionality + create a review entry
-    if (!uploadedFile) {
-      setCurrentStep(4);
-      return;
-    }
-    const newReview: ContractReview = {
-      id: Date.now().toString(),
-      fileName: uploadedFile.name,
-      contractType: selectedContractTypes.map(id => contractTypes.find(t => t.id === id)?.name).join(", ") || "Unknown",
-      status: "completed",
-      riskLevel: ["low", "medium", "high"][Math.floor(Math.random() * 3)] as "low" | "medium" | "high",
-      score: extractedDocument?.overallScore ?? Math.floor(Math.random() * 40) + 60,
-      gaps: extractedDocument ? extractedDocument.gaps.map(g => g.description) : ["No gaps available"],
-      suggestions: extractedDocument ? extractedDocument.gaps.map(g => g.recommendation) : [],
-      reviewer: "AI Legal Agent",
-      uploadDate: new Date().toISOString().split('T')[0]
-    };
-    setReviews([newReview, ...reviews]);
-
-    // Log analysis completion to audit logs (only after processing)
-    try {
-      await fetch('/api/template-audit-logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'analyzed',
-          templateId: selectedTemplate?.id,
-          templateName: selectedTemplate?.name,
-          fileName: newReview.fileName,
-          score: newReview.score,
-          gapsCount: extractedDocument?.gaps?.length ?? 0,
-          status: newReview.status,
-          analysisDate: new Date().toISOString(),
-        })
-      });
-      // Refresh logs panel
-      reloadTemplateLogs();
-    } catch (_) {
-      // ignore logging errors
-    }
-    setCurrentStep(4);
-  };
-
-  const downloadDocument = (format: 'docx' | 'pdf') => {
-    // Mock download functionality
-    const blob = new Blob([editedText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${uploadedFile?.name || 'contract'}.${format === 'docx' ? 'docx' : 'pdf'}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const handleAnalyze = async () => {
     if (!uploadedFile) return;
     
     setIsAnalyzing(true);
     // Simulate analysis
-    setTimeout(() => {
+    if (analyzeTimerRef.current) {
+      clearTimeout(analyzeTimerRef.current);
+      analyzeTimerRef.current = null;
+    }
+    analyzeTimerRef.current = window.setTimeout(() => {
       const newReview: ContractReview = {
-        id: Date.now().toString(),
-        fileName: uploadedFile.name,
-        contractType: selectedContractTypes.map(id => contractTypes.find(t => t.id === id)?.name).join(", ") || "Unknown",
-        status: "completed",
-        riskLevel: ["low", "medium", "high"][Math.floor(Math.random() * 3)] as "low" | "medium" | "high",
-        score: Math.floor(Math.random() * 40) + 60,
-        gaps: [
-          "Sample contractual gap identified",
-          "Missing standard clause for this contract type",
-          "Terms and conditions need clarification"
-        ],
-        suggestions: [
-          "Add comprehensive liability limitation clause",
-          "Include standard termination procedures",
-          "Update governing law and jurisdiction clauses"
-        ],
-        reviewer: "AI Legal Agent",
-        uploadDate: new Date().toISOString().split('T')[0]
+        id: `rev-${Date.now()}`,
+        fileName: uploadedFile!.name,
+        contractType: selectedTemplate?.type || 'custom',
+        status: "in-review",
+        riskLevel: (extractedDocument && extractedDocument.overallScore < 50) ? "high" : "medium",
+        score: extractedDocument?.overallScore ?? 45,
+        gaps: extractedDocument?.gaps.map(g => g.id) ?? [],
+        suggestions: extractedDocument?.gaps.map(g => g.recommendation) ?? [],
+        reviewer: "Auto Analyzer",
+        uploadDate: new Date().toISOString(),
+        reviewDate: new Date().toISOString()
       };
-      setReviews([newReview, ...reviews]);
-      // Log analysis completion to audit logs (only after processing)
+
+      setReviews(prev => [newReview, ...prev]);
       try {
-        fetch('/api/template-audit-logs', {
+        // Optional: log analysis event
+        void fetch('/api/log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'analyzed',
-            templateId: selectedTemplate?.id,
-            templateName: selectedTemplate?.name,
-            fileName: newReview.fileName,
-            score: newReview.score,
-            gapsCount: newReview.gaps.length,
-            status: newReview.status,
-            analysisDate: new Date().toISOString(),
-          })
+          body: JSON.stringify({ event: 'analyze', file: uploadedFile!.name, template: selectedTemplate?.id || 'custom' })
         });
       } catch (_) {
         // ignore logging errors
       }
       setIsAnalyzing(false);
-      setCurrentStep(4);
+      setCurrentStep(5);
+      analyzeTimerRef.current = null;
     }, 3000);
   };
 
@@ -776,9 +829,12 @@ The parties agree to the terms herein.`;
   });
 
   const canProceedToStep2 = !!selectedTemplate || selectedContractTypes.length > 0;
-  const canProceedToStep3 = uploadedFile !== null;
-  const canAnalyze = selectedContractTypes.length > 0 && uploadedFile !== null;
-  const canExtract = !!selectedTemplate && uploadedFile !== null;
+  // From new Step 2 -> Step 3
+  const canProceedToStep3 = templateMode === 'standard' ? !!selectedTemplate : (!!customTemplateName || !!customTemplateText);
+  // From Step 3 -> Step 4 (must have a document uploaded)
+  const canProceedToStep4 = uploadedFile !== null;
+  const canAnalyze = (templateMode === 'standard' ? !!selectedTemplate : (!!customTemplateName || !!customTemplateText)) && uploadedFile !== null;
+  const canExtract = (templateMode === 'standard' ? !!selectedTemplate : (!!customTemplateName || !!customTemplateText)) && uploadedFile !== null;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1035,120 +1091,247 @@ The parties agree to the terms herein.`;
             </div>
           )}
 
-          {/* Step 2: Upload Contract */}
+          {/* Step 2: Template Boilerplate or Custom Template */}
           {currentStep === 2 && (
             <div className="space-y-8">
-              {/* Upload Options */}
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Upload New File */}
-                <div className="relative group">
-                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center transition-all duration-300 hover:border-primary/50 hover:bg-primary/5 group-hover:scale-[1.02]">
-                    <div className="transition-transform duration-300 group-hover:scale-110">
-                      <Upload className="h-16 w-16 mx-auto mb-4 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
-                    </div>
-                    <div className="space-y-3">
-                      <p className="text-xl font-semibold text-foreground">Upload New File</p>
-                      <p className="text-muted-foreground">
-                        Drop your file here or click to browse
-                      </p>
-                      <div className="flex justify-center items-center gap-2 text-sm text-muted-foreground">
-                        <FileText className="h-4 w-4" />
-                        <span>PDF</span>
-                        <span>•</span>
-                        <span>DOC</span>
-                        <span>•</span>
-                        <span>DOCX</span>
-                      </div>
-                    </div>
-                    <div className="mt-6">
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="relative overflow-hidden transition-all duration-300 hover:scale-105"
-                        onClick={() => document.getElementById('file-upload')?.click()}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Choose File
-                      </Button>
-                    </div>
-                    <Input
-                      id="file-upload"
-                      type="file"
-                      accept=".pdf,.doc,.docx"
-                      onChange={handleFileUpload}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Template Boilerplate</CardTitle>
+                  <CardDescription>Review format or provide your own template</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Mode toggle centered */}
+                  <div className="flex items-center justify-center gap-3 mb-6">
+                    <Button
+                      variant={templateMode === 'standard' ? 'default' : 'outline'}
+                      onClick={() => {
+                        setTemplateMode('standard');
+                      }}
+                    >
+                      Use Knowledge Base
+                    </Button>
+                    <Button
+                      variant={templateMode !== 'standard' ? 'default' : 'outline'}
+                      onClick={() => {
+                        setTemplateMode('knowledge');
+                      }}
+                    >
+                      Upload Custom Template
+                    </Button>
                   </div>
-                </div>
+                  {templateMode === 'standard' ? (
+                    <div className="space-y-6">
+                      {selectedTemplate ? (
+                        <>
+                            <h4 className="text-base font-semibold mb-2">Key sections that will be checked</h4>
+                            <ul className="space-y-2 text-sm">
+                              {selectedTemplate.sections.slice(0, 6).map((s) => (
+                                <li key={s.id} className="flex items-center gap-2">
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                  <span>{s.title}</span>
+                                  <Badge variant="outline" className="ml-auto text-xs">{s.priority}</Badge>
+                                </li>
+                              ))}
+                              {selectedTemplate.sections.length > 6 && (
+                                <li className="text-muted-foreground">+{selectedTemplate.sections.length - 6} more…</li>
+                              )}
+                            </ul>
 
-                {/* Select from Assets */}
-                <div className="relative group">
-                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center transition-all duration-300 hover:border-primary/50 hover:bg-primary/5 group-hover:scale-[1.02]">
-                    <div className="transition-transform duration-300 group-hover:scale-110">
-                      <FolderOpen className="h-16 w-16 mx-auto mb-4 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+                          {/* Brief template format preview */}
+                          <div className="space-y-2">
+                            <h4 className="text-base font-semibold">Template format preview (brief)</h4>
+                            <div className="prose dark:prose-invert max-w-none border rounded-md p-4 text-sm">
+                              {selectedTemplate.sections.slice(0, 3).map((s) => {
+                                const sec: any = s as any;
+                                const preview = sec?.snippet ?? sec?.content ?? '';
+                                return (
+                                <div key={s.id} className="mb-3">
+                                  <div className="font-semibold">{s.title}</div>
+                                  <div className="text-muted-foreground">{preview || '—'}</div>
+                                </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Sources */}
+                          {(() => {
+                            const sources = (selectedTemplate as any)?.sources as string[] | undefined;
+                            return sources && sources.length > 0;
+                          })() && (
+                            <div className="space-y-2">
+                              <h4 className="text-base font-semibold">Sources</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {((selectedTemplate as any)?.sources as string[]).map((src) => (
+                                  <Badge key={src} variant="outline">{src}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">No template selected. Go back to Step 1 to choose a template.</div>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <p className="text-xl font-semibold text-foreground">Select from Assets</p>
-                      <p className="text-muted-foreground">
-                        Choose from your uploaded documents
-                      </p>
-                      <div className="text-sm text-muted-foreground">
-                        Access your previously uploaded files
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-muted-foreground">Provide a custom template</div>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setIsNotepadOpen(true)}
+                                className="gap-2"
+                                aria-label="Open Notepad"
+                              >
+                                <NotebookPen className="h-4 w-4" /> Notepad
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Paste your own template
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
-                    </div>
-                    <div className="mt-6">
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="relative overflow-hidden transition-all duration-300 hover:scale-105"
-                        onClick={() => setIsAssetPickerOpen(true)}
-                      >
-                        <FolderOpen className="h-4 w-4 mr-2" />
-                        Browse Assets
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {uploadedFile && (
-                <div className="animate-in slide-in-from-bottom-4 duration-500">
-                  <Card className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="flex-shrink-0">
-                          <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                            <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      {/* Animated Dropzone */}
+                      <div
+                        onClick={openFilePicker}
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        className={`group relative w-full rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all duration-200 ${isDragging ? 'border-primary bg-primary/5 shadow-lg' : 'border-muted-foreground/30 hover:border-primary/60 hover:bg-muted/30'} ${customTemplateName ? 'border-green-500/60 bg-green-50 dark:bg-green-950/20' : ''}`}
+                      >
+                        <div className="flex flex-col items-center justify-center gap-3">
+                          <div className={`rounded-full p-3 ${isDragging ? 'bg-primary/10' : 'bg-muted'} transition-colors`}>
+                            <FileUp className={`h-6 w-6 ${isDragging ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">Drag & drop</span> your template here
+                            <span className="text-muted-foreground"> or click to browse</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">Accepted: .pdf, .doc, .docx, .txt</div>
+                          {(customTemplateName || customTemplateText) && (
+                            <div className="mt-2 text-sm">
+                              {customTemplateName ? (
+                                <>Selected file: <span className="font-medium">{customTemplateName}</span></>
+                              ) : (
+                                <span className="font-medium text-emerald-600">Typed template provided</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.txt"
+                          className="hidden"
+                          onChange={handleCustomTemplateUpload}
+                        />
+                      </div>
+
+                      {/* Notepad Modal */}
+                      {isNotepadOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center">
+                          <div className="absolute inset-0 bg-black/50" onClick={() => setIsNotepadOpen(false)} />
+                          <div className="relative z-10 w-full max-w-3xl">
+                            <Card className="shadow-xl bg-white dark:bg-neutral-900">
+                              <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                  <CardTitle>Custom Template Notepad</CardTitle>
+                                  <CardDescription>Paste or type your template text</CardDescription>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => setIsNotepadOpen(false)}>
+                                  <X className="h-5 w-5" />
+                                </Button>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <Textarea
+                                  value={customTemplateText}
+                                  onChange={(e) => setCustomTemplateText(e.target.value)}
+                                  placeholder="e.g., Parties, Scope, Payment Terms, Termination..."
+                                  className="min-h-[280px] font-mono text-sm"
+                                />
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs text-muted-foreground">Tip: You can provide headings and clauses in your preferred format.</div>
+                                  <div className="flex gap-2">
+                                    <Button variant="outline" onClick={() => setCustomTemplateText("")}>Clear</Button>
+                                    <Button onClick={() => setIsNotepadOpen(false)}>
+                                      <Save className="h-4 w-4 mr-2" /> Save
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
                           </div>
                         </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-green-900 dark:text-green-100">File Selected Successfully</h3>
-                          <p className="text-green-700 dark:text-green-300 mt-1">
-                            <span className="font-medium">{uploadedFile.name}</span>
-                            <span className="text-sm ml-2">({(uploadedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setUploadedFile(null)}
-                            className="text-green-600 hover:text-green-700 hover:bg-green-100"
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Change File
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
 
-          {/* Step 3: Review & Analyze */}
+          {/* Step 3: Upload Contract */}
           {currentStep === 3 && (
+            <div className="space-y-8">
+              {/* Upload Options */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Upload from Device</CardTitle>
+                    <CardDescription>Upload a contract document from your computer</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-center border-2 border-dashed rounded-lg p-8">
+                      <div className="text-center">
+                        <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                        <Input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} />
+                        {uploadedFile && (
+                          <p className="text-sm text-muted-foreground mt-2">Selected: {uploadedFile.name}</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Use Existing Asset</CardTitle>
+                    <CardDescription>Select a file from your assets</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-center border-2 border-dashed rounded-lg p-8">
+                      <div className="text-center">
+                        <FolderOpen className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                        <Button variant="secondary" onClick={() => setIsAssetPickerOpen(true)}>
+                          Open Asset Picker
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Upload Tips */}
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>Tip</AlertTitle>
+                <AlertDescription>
+                  For best results, upload clear, text-based documents. Scanned PDFs may require OCR.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {/* Step 4: Review & Analyze */}
+          {currentStep === 4 && (
             <div className="space-y-8">
               <div className="grid md:grid-cols-2 gap-8">
                 <Card>
@@ -1303,8 +1486,8 @@ The parties agree to the terms herein.`;
             </div>
           )}
 
-          {/* Step 4: Results */}
-          {currentStep === 4 && (
+          {/* Step 5: Results */}
+          {currentStep === 5 && (
             <div className="space-y-6">
               {reviews.length === 0 ? (
                 <div className="text-center py-12">
@@ -1480,7 +1663,7 @@ The parties agree to the terms herein.`;
         </Button>
 
         <div className="flex gap-2">
-          {currentStep === 3 && !extractedDocument && (
+          {currentStep === 4 && !extractedDocument && (
             <Button
               onClick={handleDocumentExtraction}
               disabled={!canExtract || isAnalyzing}
@@ -1494,13 +1677,13 @@ The parties agree to the terms herein.`;
               ) : (
                 <>
                   <FileText className="h-4 w-4" />
-                  Extract & Analyze
+                  Extract
                 </>
               )}
             </Button>
           )}
 
-          {currentStep === 3 && extractedDocument && (
+          {currentStep === 4 && extractedDocument && (
             <Button
               onClick={handleSaveDocument}
               disabled={isAnalyzing}
@@ -1511,12 +1694,13 @@ The parties agree to the terms herein.`;
             </Button>
           )}
 
-          {currentStep < 3 && (
+          {currentStep < 4 && (
             <Button
               onClick={nextStep}
               disabled={
                 (currentStep === 1 && !canProceedToStep2) ||
-                (currentStep === 2 && !canProceedToStep3)
+                (currentStep === 2 && !canProceedToStep3) ||
+                (currentStep === 3 && !canProceedToStep4)
               }
               className="flex items-center gap-2"
             >
