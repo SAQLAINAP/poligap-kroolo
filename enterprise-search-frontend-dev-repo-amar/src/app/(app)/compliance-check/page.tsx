@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus, History, Calendar, TrendingDown, TrendingUp as TrendingUpIcon } from "lucide-react";
+import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus, History, Calendar, TrendingDown, TrendingUp as TrendingUpIcon, Plus, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { AssetPicker } from "@/components/AssetPicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -389,6 +389,8 @@ export default function ComplianceCheckPage() {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
+  const [addedTaskKeys, setAddedTaskKeys] = useState<Set<string>>(new Set());
+  const [addingTaskKeys, setAddingTaskKeys] = useState<Set<string>>(new Set());
 
   const steps = [
     { id: 1, title: "Select Standards", description: "Choose compliance standards" },
@@ -661,6 +663,58 @@ export default function ComplianceCheckPage() {
       case "partial": return <AlertTriangle className="h-4 w-4" />;
       case "non-compliant": return <AlertTriangle className="h-4 w-4" />;
       default: return <FileText className="h-4 w-4" />;
+    }
+  };
+
+  // Create a task in backend tasks collection with client-side dedupe
+  const addTask = async (payload: {
+    title: string;
+    description?: string;
+    priority: "critical" | "high" | "medium" | "low";
+    category?: string;
+    sourceRef?: { resultId?: string; gapId?: string; fileName?: string; standard?: string };
+  }, options?: { dedupeKey?: string }) => {
+    try {
+      const key = options?.dedupeKey;
+      if (key && addedTaskKeys.has(key)) {
+        return { success: true, deduped: true };
+      }
+      if (key) {
+        setAddingTaskKeys(prev => new Set(prev).add(key));
+      }
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: payload.title,
+          description: payload.description,
+          status: 'pending',
+          priority: payload.priority,
+          category: payload.category,
+          source: 'compliance',
+          sourceRef: payload.sourceRef,
+        })
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        console.error('Failed to create task', e);
+      } else {
+        if (key) {
+          setAddedTaskKeys(prev => new Set(prev).add(key));
+        }
+        console.debug('Task created');
+      }
+    } catch (err) {
+      console.error('Error creating task', err);
+    } finally {
+      const key = options?.dedupeKey;
+      if (key) {
+        setAddingTaskKeys(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
     }
   };
 
@@ -1113,14 +1167,41 @@ export default function ComplianceCheckPage() {
                                           <Card key={gap.id} className={`${config.color} border-l-8 shadow-sm hover:shadow-md transition-shadow`}>
                                             <CardContent className="p-6">
                                               <div className="space-y-3">
-                                                <div className="flex items-start justify-between">
+                                                <div className="flex items-start justify-between gap-2">
                                                   <div className="flex-1">
                                                     <h6 className="font-bold text-base mb-2">{gap.title}</h6>
                                                     <p className="text-sm leading-relaxed mb-3">{gap.description}</p>
                                                   </div>
-                                                  <Badge variant="outline" className="ml-4 text-xs whitespace-nowrap">
-                                                    {gap.category}
-                                                  </Badge>
+                                                  <div className="flex items-center gap-2">
+                                                    <Badge variant="outline" className="text-xs whitespace-nowrap">
+                                                      {gap.category}
+                                                    </Badge>
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      className="flex items-center gap-1"
+                                                      title="Add to My Tasks"
+                                                      disabled={addingTaskKeys.has(`gap:${result.id}:${gap.id}`) || addedTaskKeys.has(`gap:${result.id}:${gap.id}`)}
+                                                      onClick={() => addTask({
+                                                        title: gap.title,
+                                                        description: `${gap.description} \nRecommended: ${gap.recommendation}`,
+                                                        priority: gap.priority,
+                                                        category: gap.category,
+                                                        sourceRef: { resultId: result.id, gapId: gap.id, fileName: result.fileName, standard: result.standard }
+                                                      }, { dedupeKey: `gap:${result.id}:${gap.id}` })}
+                                                    >
+                                                      {addingTaskKeys.has(`gap:${result.id}:${gap.id}`) ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                      ) : addedTaskKeys.has(`gap:${result.id}:${gap.id}`) ? (
+                                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                                      ) : (
+                                                        <Plus className="h-4 w-4" />
+                                                      )}
+                                                      <span className="hidden md:inline">
+                                                        {addingTaskKeys.has(`gap:${result.id}:${gap.id}`) ? 'Adding…' : addedTaskKeys.has(`gap:${result.id}:${gap.id}`) ? 'Added' : 'Add Task'}
+                                                      </span>
+                                                    </Button>
+                                                  </div>
                                                 </div>
                                                 
                                                 <div className="flex items-center gap-6 text-xs opacity-80">
@@ -1181,11 +1262,36 @@ export default function ComplianceCheckPage() {
                             <CardContent>
                               <div className="space-y-4">
                                 {result.suggestions.map((suggestion, index) => (
-                                  <div key={index} className="flex items-start gap-3 p-3 bg-white/60 dark:bg-black/30 rounded-lg border">
-                                    <div className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mt-0.5">
-                                      <span className="text-blue-600 dark:text-blue-400 text-xs font-bold">{index + 1}</span>
+                                  <div key={index} className="flex items-start justify-between gap-3 p-3 bg-white/60 dark:bg-black/30 rounded-lg border">
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mt-0.5">
+                                        <span className="text-blue-600 dark:text-blue-400 text-xs font-bold">{index + 1}</span>
+                                      </div>
+                                      <p className="text-sm leading-relaxed">{suggestion}</p>
                                     </div>
-                                    <p className="text-sm leading-relaxed">{suggestion}</p>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex items-center gap-1"
+                                      title="Add suggestion as task"
+                                      disabled={addingTaskKeys.has(`suggestion:${result.id}:${index}`) || addedTaskKeys.has(`suggestion:${result.id}:${index}`)}
+                                      onClick={() => addTask({
+                                        title: suggestion.substring(0, 60),
+                                        description: suggestion,
+                                        priority: 'low',
+                                        category: 'General Improvement',
+                                        sourceRef: { resultId: result.id, fileName: result.fileName, standard: result.standard }
+                                      }, { dedupeKey: `suggestion:${result.id}:${index}` })}
+                                    >
+                                      {addingTaskKeys.has(`suggestion:${result.id}:${index}`) ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : addedTaskKeys.has(`suggestion:${result.id}:${index}`) ? (
+                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                      ) : (
+                                        <Plus className="h-4 w-4" />
+                                      )}
+                                      <span className="hidden md:inline">{addingTaskKeys.has(`suggestion:${result.id}:${index}`) ? 'Adding…' : addedTaskKeys.has(`suggestion:${result.id}:${index}`) ? 'Added' : 'Add Task'}</span>
+                                    </Button>
                                   </div>
                                 ))}
                               </div>

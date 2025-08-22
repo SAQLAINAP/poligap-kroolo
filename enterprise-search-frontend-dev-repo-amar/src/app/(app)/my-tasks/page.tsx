@@ -1,41 +1,87 @@
 "use client";
 
-import React, { useState } from "react";
-import { CheckSquare, Plus, Calendar, Clock, User, Filter } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CheckSquare, Plus, Calendar, User, Filter } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Task {
-  id: string;
+  _id?: string;
+  id?: string; // client convenience
   title: string;
-  description: string;
+  description?: string;
   status: "pending" | "in-progress" | "completed";
-  priority: "low" | "medium" | "high";
-  dueDate: string;
-  assignee: string;
-  category: string;
+  priority: "low" | "medium" | "high" | "critical";
+  dueDate?: string;
+  assignee?: string;
+  category?: string;
+  source?: "compliance" | "contract" | "manual";
+  sourceRef?: Record<string, any>;
 }
 
-// Dynamic tasks will be loaded from API or user actions
+// Dynamic tasks loaded from API
 const initialTasks: Task[] = [];
 
 export default function MyTasksPage() {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState("all"); // status
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
+
+  const loadTasks = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm.trim()) params.set("q", searchTerm.trim());
+      if (activeTab !== "all") params.set("status", activeTab);
+      if (priorityFilter !== "all") params.set("priority", priorityFilter);
+      if (sourceFilter !== "all") params.set("source", sourceFilter);
+
+      const res = await fetch(`/api/tasks${params.toString() ? `?${params.toString()}` : ""}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to load tasks");
+      }
+      const incoming: Task[] = (data.tasks || []).map((t: any) => ({ ...t, id: t._id || t.id }));
+      // Deduplicate using a stable composite key
+      const byKey = new Map<string, Task>();
+      for (const t of incoming) {
+        const key = t.sourceRef && (t.sourceRef.resultId || t.sourceRef.gapId)
+          ? `${t.source || 'unknown'}:${t.title}:${t.sourceRef.resultId || ''}:${t.sourceRef.gapId || ''}`
+          : (t._id || t.id || `${t.title}:${t.dueDate || ''}`);
+        if (!byKey.has(key)) byKey.set(key, t);
+      }
+      setTasks(Array.from(byKey.values()));
+    } catch (e: any) {
+      setError(e.message || "Failed to load tasks");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, priorityFilter, sourceFilter]);
 
   const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         task.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (activeTab === "all") return matchesSearch;
-    return matchesSearch && task.status === activeTab;
+    const matchesSearch = !searchTerm.trim() ||
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.description || "").toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
   });
 
   const getStatusColor = (status: string) => {
@@ -49,10 +95,40 @@ export default function MyTasksPage() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "high": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+      case "critical": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+      case "high": return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
       case "medium": return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
       case "low": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
       default: return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+    }
+  };
+
+  const createTask = async () => {
+    const title = newTaskTitle.trim();
+    if (!title) return;
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description: newTaskDescription.trim(),
+          status: 'pending',
+          priority: 'medium',
+          dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+          assignee: 'You',
+          category: 'General',
+          source: 'manual'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create task');
+      setNewTaskTitle("");
+      setNewTaskDescription("");
+      setShowNewTaskForm(false);
+      await loadTasks();
+    } catch (e) {
+      console.error('Create task failed', e);
     }
   };
 
@@ -89,6 +165,30 @@ export default function MyTasksPage() {
           />
           <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         </div>
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priorities</SelectItem>
+            <SelectItem value="critical">Critical</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            <SelectItem value="compliance">Compliance</SelectItem>
+            <SelectItem value="contract">Contract</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" onClick={loadTasks}>Apply</Button>
       </div>
 
       {/* New Task Form */}
@@ -118,27 +218,7 @@ export default function MyTasksPage() {
               />
             </div>
             <div className="flex gap-2">
-              <Button 
-                onClick={() => {
-                  if (newTaskTitle.trim()) {
-                    const newTask: Task = {
-                      id: Date.now().toString(),
-                      title: newTaskTitle,
-                      description: newTaskDescription,
-                      status: "pending",
-                      priority: "medium",
-                      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                      assignee: "You",
-                      category: "General"
-                    };
-                    setTasks([newTask, ...tasks]);
-                    setNewTaskTitle("");
-                    setNewTaskDescription("");
-                    setShowNewTaskForm(false);
-                  }
-                }}
-                disabled={!newTaskTitle.trim()}
-              >
+              <Button onClick={createTask} disabled={!newTaskTitle.trim()}>
                 Create Task
               </Button>
               <Button 
@@ -166,7 +246,17 @@ export default function MyTasksPage() {
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4">
-          {filteredTasks.length === 0 ? (
+          {loading && (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">Loading tasks…</CardContent>
+            </Card>
+          )}
+          {!!error && (
+            <Card>
+              <CardContent className="py-8 text-center text-red-600">{error}</CardContent>
+            </Card>
+          )}
+          {!loading && !error && filteredTasks.length === 0 ? (
             <Card>
               <CardContent className="flex items-center justify-center py-12">
                 <div className="text-center">
@@ -181,7 +271,7 @@ export default function MyTasksPage() {
           ) : (
             <div className="grid gap-4">
               {filteredTasks.map((task) => (
-                <Card key={task.id} className="hover:shadow-md transition-shadow">
+                <Card key={task._id || task.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
@@ -195,6 +285,9 @@ export default function MyTasksPage() {
                         <Badge className={getStatusColor(task.status)}>
                           {task.status.replace("-", " ")}
                         </Badge>
+                        {task.source && (
+                          <Badge variant="outline">{task.source}</Badge>
+                        )}
                       </div>
                     </div>
                   </CardHeader>
@@ -203,14 +296,14 @@ export default function MyTasksPage() {
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                          <span>Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "—"}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <User className="h-4 w-4" />
-                          <span>{task.assignee}</span>
+                          <span>{task.assignee || "Unassigned"}</span>
                         </div>
                       </div>
-                      <Badge variant="outline">{task.category}</Badge>
+                      <Badge variant="outline">{task.category || "General"}</Badge>
                     </div>
                   </CardContent>
                 </Card>
