@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FileText, Upload, Eye, Download, AlertTriangle, CheckCircle, Clock, User, ChevronRight, ChevronLeft, Building, Users, Shield, Handshake, Award, Home, TrendingUp, Car, ShoppingCart, Truck, Crown, Network, Search, Filter, Briefcase, Globe, Heart, Zap, Wifi, Database, Code, Palette, Music, Camera, Plane, Ship, Factory, Hammer, Wrench, Cog, Book, GraduationCap, Stethoscope, Scale, Gavel, DollarSign, CreditCard, PiggyBank, Landmark, Info, FolderOpen, BookOpen, Library, Edit3, RotateCcw, Save, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -330,6 +330,11 @@ export default function ContractReview() {
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   
+  // Audit logs state for selected template
+  const [templateLogs, setTemplateLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  
   const templatesContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollTemplates = (direction: 'left' | 'right') => {
@@ -338,6 +343,33 @@ export default function ContractReview() {
     const amount = el.clientWidth * 0.8;
     el.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
   };
+
+  // Fetch audit logs helper and effect on template change
+  const reloadTemplateLogs = async () => {
+    if (!selectedTemplate) {
+      setTemplateLogs([]);
+      return;
+    }
+    setLogsLoading(true);
+    setLogsError(null);
+    try {
+      const res = await fetch(`/api/template-audit-logs?templateId=${encodeURIComponent(selectedTemplate.id)}&limit=20`);
+      const data = await res.json();
+      if (data?.success) {
+        setTemplateLogs(data.logs || []);
+      } else {
+        setLogsError(data?.error || 'Failed to load logs');
+      }
+    } catch (err) {
+      setLogsError('Failed to load logs');
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadTemplateLogs();
+  }, [selectedTemplate]);
 
 
   const contractTypes = [
@@ -460,7 +492,6 @@ export default function ContractReview() {
 
   const handleTemplateSelect = (template: ContractTemplate) => {
     setSelectedTemplate(template);
-    setCurrentStep(2);
   };
 
   const handleDocumentExtraction = async () => {
@@ -600,6 +631,28 @@ The parties agree to the terms herein.`;
       uploadDate: new Date().toISOString().split('T')[0]
     };
     setReviews([newReview, ...reviews]);
+
+    // Log analysis completion to audit logs (only after processing)
+    try {
+      await fetch('/api/template-audit-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'analyzed',
+          templateId: selectedTemplate?.id,
+          templateName: selectedTemplate?.name,
+          fileName: newReview.fileName,
+          score: newReview.score,
+          gapsCount: extractedDocument?.gaps?.length ?? 0,
+          status: newReview.status,
+          analysisDate: new Date().toISOString(),
+        })
+      });
+      // Refresh logs panel
+      reloadTemplateLogs();
+    } catch (_) {
+      // ignore logging errors
+    }
     setCurrentStep(4);
   };
 
@@ -643,6 +696,25 @@ The parties agree to the terms herein.`;
         uploadDate: new Date().toISOString().split('T')[0]
       };
       setReviews([newReview, ...reviews]);
+      // Log analysis completion to audit logs (only after processing)
+      try {
+        fetch('/api/template-audit-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'analyzed',
+            templateId: selectedTemplate?.id,
+            templateName: selectedTemplate?.name,
+            fileName: newReview.fileName,
+            score: newReview.score,
+            gapsCount: newReview.gaps.length,
+            status: newReview.status,
+            analysisDate: new Date().toISOString(),
+          })
+        });
+      } catch (_) {
+        // ignore logging errors
+      }
       setIsAnalyzing(false);
       setCurrentStep(4);
     }, 3000);
@@ -703,7 +775,7 @@ The parties agree to the terms herein.`;
     return matchesSearch && matchesFilter;
   });
 
-  const canProceedToStep2 = selectedContractTypes.length > 0;
+  const canProceedToStep2 = !!selectedTemplate || selectedContractTypes.length > 0;
   const canProceedToStep3 = uploadedFile !== null;
   const canAnalyze = selectedContractTypes.length > 0 && uploadedFile !== null;
   const canExtract = !!selectedTemplate && uploadedFile !== null;
@@ -908,6 +980,58 @@ The parties agree to the terms herein.`;
                   </CardContent>
                 </Card>
               )}
+
+              {selectedTemplate && (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-primary" />
+                      Audit Logs
+                    </CardTitle>
+                    <CardDescription>
+                      Recent activity for template "{selectedTemplate.name}"
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {logsLoading && (
+                      <div className="text-sm text-muted-foreground">Loading logs…</div>
+                    )}
+                    {!logsLoading && logsError && (
+                      <div className="text-sm text-red-600 dark:text-red-400">{logsError}</div>
+                    )}
+                    {!logsLoading && !logsError && templateLogs.filter(l => l.action !== 'selected').length === 0 && (
+                      <div className="text-sm text-muted-foreground">No logs yet for this template.</div>
+                    )}
+                    {!logsLoading && !logsError && templateLogs.filter(l => l.action !== 'selected').length > 0 && (
+                      <div className="space-y-3">
+                        {templateLogs.filter(l => l.action !== 'selected').map((log) => (
+                          <div key={log._id} className="flex items-center justify-between border rounded-md p-3">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div className="text-sm font-medium">
+                                  {log.status ? `Result: ${log.status}` : (log.action === 'analyzed' ? 'Analysis completed' : 'Event')}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(log.analysisDate).toLocaleString()} {log.fileName ? `• ${log.fileName}` : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {typeof log.score === 'number' && (
+                                <Badge variant="outline" className="text-xs">Score: {log.score}</Badge>
+                              )}
+                              {typeof log.gapsCount === 'number' && (
+                                <Badge variant="outline" className="text-xs">Gaps: {log.gapsCount}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
@@ -1029,10 +1153,24 @@ The parties agree to the terms herein.`;
               <div className="grid md:grid-cols-2 gap-8">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg font-bold">Selected Contract Type</CardTitle>
+                    <CardTitle className="text-lg font-bold">Selected Template / Contract Type</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {selectedContractTypes.length > 0 ? (
+                    {selectedTemplate ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <BookOpen className="h-5 w-5 text-primary" />
+                          <span className="text-sm font-bold">{selectedTemplate.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant="outline">{selectedTemplate.type}</Badge>
+                          {selectedTemplate.isBaseline && (
+                            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300">Baseline</Badge>
+                          )}
+                          <span>Updated: {selectedTemplate.lastUpdated}</span>
+                        </div>
+                      </div>
+                    ) : selectedContractTypes.length > 0 ? (
                       <div className="space-y-2">
                         {selectedContractTypes.map(typeId => {
                           const selectedType = contractTypes.find(t => t.id === typeId);
@@ -1047,7 +1185,7 @@ The parties agree to the terms herein.`;
                         })}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No contract types selected</p>
+                      <p className="text-sm text-muted-foreground">No template or contract type selected</p>
                     )}
                   </CardContent>
                 </Card>
@@ -1096,6 +1234,17 @@ The parties agree to the terms herein.`;
                     </p>
                   </div>
                 </div>
+              )}
+
+              {/* Guidance panel to utilize space when idle */}
+              {!isAnalyzing && !extractedDocument && (
+                <Alert className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Before you proceed</AlertTitle>
+                  <AlertDescription>
+                    Ensure the selected template matches your document. Click "Extract & Analyze" to detect gaps and risks. Sensitive data should be reviewed before sharing.
+                  </AlertDescription>
+                </Alert>
               )}
 
               {/* Extracted text with highlighted gaps */}
