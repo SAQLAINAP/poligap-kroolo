@@ -1379,13 +1379,17 @@ export default function ComplianceCheckPage() {
                       return (
                         <Card
                           key={log._id}
-                          className={`p-3 cursor-pointer hover:shadow-md transition-shadow ${isRecent ? 'bg-blue-50 border-blue-200' : ''}`}
+                          className={`p-3 cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                            isRecent
+                              ? 'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800'
+                              : 'hover:bg-muted/50'
+                          }`}
                           onClick={() => { setSelectedAuditLog(log); setIsLogDialogOpen(true); }}
                         >
                           <div className="space-y-2">
                             <div className="flex items-start justify-between">
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate" title={log.fileName}>
+                                <p className="text-sm font-medium truncate text-foreground" title={log.fileName}>
                                   {log.fileName}
                                 </p>
                                 <div className="flex items-center gap-2 mt-1">
@@ -1398,7 +1402,7 @@ export default function ComplianceCheckPage() {
                                 </div>
                               </div>
                               {isRecent && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className="text-xs border-primary text-primary">
                                   New
                                 </Badge>
                               )}
@@ -1417,12 +1421,12 @@ export default function ComplianceCheckPage() {
                             
                             <div className="flex flex-wrap gap-1">
                               {log.standards.slice(0, 2).map((standard) => (
-                                <Badge key={standard} variant="outline" className="text-xs">
+                                <Badge key={standard} variant="outline" className="text-xs border-muted-300 text-muted-700 dark:border-muted-700 dark:text-muted-300">
                                   {standard.toUpperCase()}
                                 </Badge>
                               ))}
                               {log.standards.length > 2 && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className="text-xs border-muted-300 text-muted-700 dark:border-muted-700 dark:text-muted-300">
                                   +{log.standards.length - 2}
                                 </Badge>
                               )}

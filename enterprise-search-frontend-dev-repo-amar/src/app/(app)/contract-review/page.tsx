@@ -428,9 +428,12 @@ export default function ContractReview() {
 
   // Clear any ongoing analysis when navigating away from Step 4
   useEffect(() => {
-    if (currentStep !== 4 && analyzeTimerRef.current) {
-      clearTimeout(analyzeTimerRef.current);
-      analyzeTimerRef.current = null;
+    if (currentStep !== 4) {
+      if (analyzeTimerRef.current) {
+        clearTimeout(analyzeTimerRef.current);
+        analyzeTimerRef.current = null;
+      }
+      // Always reset analyzing state when leaving Step 4 to prevent stuck UI
       setIsAnalyzing(false);
     }
   }, [currentStep]);
@@ -1061,11 +1064,14 @@ The parties agree to the terms herein.`;
                     {!logsLoading && !logsError && templateLogs.filter(l => l.action !== 'selected').length > 0 && (
                       <div className="space-y-3">
                         {templateLogs.filter(l => l.action !== 'selected').map((log) => (
-                          <div key={log._id} className="flex items-center justify-between border rounded-md p-3">
+                          <div
+                            key={log._id}
+                            className="flex items-center justify-between border rounded-md p-3 bg-muted/40 dark:bg-muted/30 hover:bg-muted/60 transition-colors border-border dark:border-slate-700"
+                          >
                             <div className="flex items-center gap-3">
                               <FileText className="h-4 w-4 text-muted-foreground" />
                               <div>
-                                <div className="text-sm font-medium">
+                                <div className="text-sm font-medium text-foreground">
                                   {log.status ? `Result: ${log.status}` : (log.action === 'analyzed' ? 'Analysis completed' : 'Event')}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
@@ -1075,10 +1081,10 @@ The parties agree to the terms herein.`;
                             </div>
                             <div className="flex items-center gap-2">
                               {typeof log.score === 'number' && (
-                                <Badge variant="outline" className="text-xs">Score: {log.score}</Badge>
+                                <Badge variant="outline" className="text-xs border-primary/40 text-primary">Score: {log.score}</Badge>
                               )}
                               {typeof log.gapsCount === 'number' && (
-                                <Badge variant="outline" className="text-xs">Gaps: {log.gapsCount}</Badge>
+                                <Badge variant="outline" className="text-xs border-blue-400/40 text-blue-700 dark:text-blue-300">Gaps: {log.gapsCount}</Badge>
                               )}
                             </div>
                           </div>
@@ -1095,10 +1101,6 @@ The parties agree to the terms herein.`;
           {currentStep === 2 && (
             <div className="space-y-8">
               <Card>
-                <CardHeader>
-                  <CardTitle>Template Boilerplate</CardTitle>
-                  <CardDescription>Review format or provide your own template</CardDescription>
-                </CardHeader>
                 <CardContent>
                   {/* Mode toggle centered */}
                   <div className="flex items-center justify-center gap-3 mb-6">
