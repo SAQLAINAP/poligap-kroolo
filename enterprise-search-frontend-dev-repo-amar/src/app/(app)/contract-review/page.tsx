@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 
 interface ContractTemplate {
   id: string;
@@ -338,6 +339,7 @@ export default function ContractReview() {
   const [isNotepadOpen, setIsNotepadOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [applyRuleBase, setApplyRuleBase] = useState(false);
   
   // Audit logs state for selected template
   const [templateLogs, setTemplateLogs] = useState<any[]>([]);
@@ -1335,6 +1337,20 @@ The parties agree to the terms herein.`;
           {/* Step 4: Review & Analyze */}
           {currentStep === 4 && (
             <div className="space-y-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Analysis Options</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Apply RuleBase</div>
+                      <div className="text-sm text-muted-foreground">Use your custom company rules during analysis</div>
+                    </div>
+                    <Switch checked={applyRuleBase} onCheckedChange={setApplyRuleBase} />
+                  </div>
+                </CardContent>
+              </Card>
               <div className="grid md:grid-cols-2 gap-8">
                 <Card>
                   <CardHeader>

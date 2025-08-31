@@ -106,7 +106,7 @@ export default function Home() {
         // const data = await response.json();
         // console.log("FastAPI Response:", data);
 
-        router.push("/search");
+        router.push("/home");
       } catch (error) {
         console.error("Error building/sending payload:", error);
       }

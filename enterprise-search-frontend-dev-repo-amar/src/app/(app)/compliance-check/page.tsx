@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 
 interface ComplianceStandard {
   id: string;
@@ -380,6 +381,7 @@ export default function ComplianceCheckPage() {
   const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
+  const [applyRuleBase, setApplyRuleBase] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<ComplianceResult[]>([]);
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
@@ -515,6 +517,7 @@ export default function ComplianceCheckPage() {
       const formData = new FormData();
       formData.append('file', uploadedFile);
       formData.append('selectedStandards', JSON.stringify(selectedStandards));
+      formData.append('applyRuleBase', String(applyRuleBase));
 
       const response = await fetch('/api/compliance-analysis', {
         method: 'POST',
@@ -942,6 +945,20 @@ export default function ComplianceCheckPage() {
           {/* Step 3: Review & Analyze */}
           {currentStep === 3 && (
             <div className="space-y-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Analysis Options</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Apply RuleBase</div>
+                      <div className="text-sm text-muted-foreground">Use your custom company rules during analysis</div>
+                    </div>
+                    <Switch checked={applyRuleBase} onCheckedChange={setApplyRuleBase} />
+                  </div>
+                </CardContent>
+              </Card>
               <div className="grid md:grid-cols-2 gap-8">
                 <Card>
                   <CardHeader>

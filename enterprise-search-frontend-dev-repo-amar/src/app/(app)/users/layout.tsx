@@ -17,7 +17,7 @@ export default function KnowledgeBaseLayout({
     if (!selectedCompany) return setChecked(true);
     const userRole = selectedCompany.role;
     if (userRole === "User") {
-      router.replace("/search");
+      router.replace("/home");
     }
     setChecked(true);
   }, [selectedCompany, router]);
