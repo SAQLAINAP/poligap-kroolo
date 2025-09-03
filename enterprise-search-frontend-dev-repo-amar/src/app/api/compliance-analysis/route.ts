@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCompliancePrompt } from '@/lib/compliance-prompt';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 // Primary: Gemini AI with direct file upload
 async function analyzeWithGemini(file: File, selectedStandards: string[]): Promise<any> {
@@ -246,11 +248,81 @@ function extractListFromText(text: string, keywords: string[]): string[] {
   return relevantSentences.slice(0, 5);
 }
 
+async function readRulebaseRules(): Promise<any[]> {
+  try {
+    const dataDir = path.join(process.cwd(), 'data');
+    await fs.mkdir(dataDir, { recursive: true });
+    const filePath = path.join(dataDir, 'rulebase.json');
+    try { await fs.access(filePath); } catch { await fs.writeFile(filePath, JSON.stringify({ rules: [] }, null, 2), 'utf-8'); }
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(fileContent);
+    return Array.isArray(parsed?.rules) ? parsed.rules : [];
+  } catch {
+    return [];
+  }
+}
+
+function applyRulebaseToAnalysis(analysis: any, rules: any[], selectedStandards: string[]): { analysis: any, applied: boolean, ruleCount: number } {
+  if (!analysis) return { analysis, applied: false, ruleCount: 0 };
+  // Only apply active rules. Treat missing 'active' as true for backwards compatibility
+  const list = Array.isArray(rules) ? rules.filter((r: any) => r?.active !== false) : [];
+  if (list.length === 0) return { analysis, applied: false, ruleCount: 0 };
+
+  const updated = { ...analysis };
+  updated.standardsAnalysis = Array.isArray(updated.standardsAnalysis) ? updated.standardsAnalysis : [];
+  if (updated.standardsAnalysis.length === 0) {
+    updated.standardsAnalysis.push({
+      standard: selectedStandards?.join(', ') || 'General',
+      score: typeof updated.overallScore === 'number' ? updated.overallScore : 70,
+      status: 'partial',
+      gaps: [],
+      suggestions: [],
+      criticalIssues: []
+    });
+  }
+
+  const primary = { ...updated.standardsAnalysis[0] };
+  const suggestions: string[] = Array.isArray(primary.suggestions) ? [...primary.suggestions] : [];
+  const gaps: string[] = Array.isArray(primary.gaps) ? [...primary.gaps] : [];
+  const standardLabel = selectedStandards?.map(s => s.toUpperCase()).join(', ');
+
+  for (const r of list) {
+    const rName = r?.name || 'Unnamed Rule';
+    const rDesc = r?.description ? `: ${r.description}` : '';
+    const sug = `Ensure rule "${rName}" is addressed for ${standardLabel || 'selected standards'}${rDesc}.`;
+    if (!suggestions.some(s => s.includes(rName))) suggestions.push(sug);
+    if (rDesc && !gaps.some(g => g.includes(rName))) gaps.push(`Document may not explicitly cover "${rName}"${rDesc}.`);
+  }
+
+  primary.suggestions = suggestions;
+  primary.gaps = gaps;
+
+  const baseBefore = typeof updated.overallScore === 'number' ? updated.overallScore : (primary.score || 70);
+  const inducedCount = Math.max(0, gaps.length - (analysis?.standardsAnalysis?.[0]?.gaps?.length || 0));
+  const penalty = Math.min(10, inducedCount);
+  const newScore = Math.max(0, baseBefore - penalty);
+  updated.overallScore = newScore;
+  primary.score = newScore;
+  primary.status = newScore >= 90 ? 'compliant' : newScore >= 70 ? 'partial' : 'non-compliant';
+  updated.standardsAnalysis[0] = primary;
+
+  if (updated.summary) {
+    updated.summary = {
+      ...updated.summary,
+      totalGaps: Array.isArray(primary.gaps) ? primary.gaps.length : updated.summary.totalGaps,
+      recommendedActions: Array.isArray(primary.suggestions) ? primary.suggestions.slice(0, 5) : updated.summary.recommendedActions,
+    };
+  }
+
+  return { analysis: updated, applied: true, ruleCount: list.length };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const selectedStandards = JSON.parse(formData.get('selectedStandards') as string);
+    const applyRuleBase = String(formData.get('applyRuleBase') || 'false') === 'true';
 
     console.log('Received compliance analysis request');
     console.log('File info:', { name: file?.name, type: file?.type, size: file?.size });
@@ -305,12 +377,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Optionally apply RuleBase
+    let appliedRuleBase = false;
+    let ruleCount = 0;
+    if (applyRuleBase) {
+      const rules = await readRulebaseRules();
+      const applied = applyRulebaseToAnalysis(analysisResult, rules, selectedStandards);
+      analysisResult = applied.analysis;
+      appliedRuleBase = applied.applied;
+      ruleCount = applied.ruleCount;
+      method = `${method}+rulebase`;
+    }
+
     return NextResponse.json({
       success: true,
       fileName: file.name,
       selectedStandards,
       analysis: analysisResult,
-      method
+      method,
+      appliedRuleBase,
+      ruleCount
     });
 
   } catch (error) {

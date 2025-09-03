@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus, History, Calendar, TrendingDown, TrendingUp as TrendingUpIcon, Plus, Loader2 } from "lucide-react";
+import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus, History, Calendar, TrendingDown, TrendingUp as TrendingUpIcon, Plus, Loader2, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AssetPicker } from "@/components/AssetPicker";
@@ -58,6 +58,7 @@ interface AuditLog {
   snapshot?: {
     gaps?: ComplianceGap[];
     suggestions?: string[];
+    rulebase?: { applied: boolean; ruleCount: number; method?: string };
   };
 }
 
@@ -388,13 +389,17 @@ export default function ComplianceCheckPage() {
   const [results, setResults] = useState<ComplianceResult[]>([]);
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [analysisMethod, setAnalysisMethod] = useState<string>("");
+  const [appliedRuleBase, setAppliedRuleBase] = useState<boolean>(false);
+  const [rulebaseCount, setRulebaseCount] = useState<number>(0);
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState<string>("all");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [showIssues, setShowIssues] = useState(true);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
   const [addedTaskKeys, setAddedTaskKeys] = useState<Set<string>>(new Set());
   const [addingTaskKeys, setAddingTaskKeys] = useState<Set<string>>(new Set());
+  const [isLogsCollapsed, setIsLogsCollapsed] = useState(false);
 
   const steps = [
     { id: 1, title: "Select Standards", description: "Choose compliance standards" },
@@ -489,6 +494,7 @@ export default function ComplianceCheckPage() {
           gaps: result.gaps,
           suggestions: result.suggestions,
           fullResult: result,
+          rulebase: { applied: appliedRuleBase, ruleCount: rulebaseCount, method: analysisMethod }
         }
       };
 
@@ -549,6 +555,8 @@ export default function ComplianceCheckPage() {
 
       console.log('Analysis completed using:', data.method || 'unknown method');
       setAnalysisMethod(data.method || 'unknown');
+      if (typeof data.appliedRuleBase !== 'undefined') setAppliedRuleBase(!!data.appliedRuleBase);
+      if (typeof data.ruleCount !== 'undefined') setRulebaseCount(Number(data.ruleCount) || 0);
 
       const analysis = data.analysis;
       const overallScore = analysis.overallScore || 75;
@@ -1076,6 +1084,14 @@ export default function ComplianceCheckPage() {
                                 • Powered by {analysisMethod.includes('kroolo') ? 'Kroolo AI' : 'Gemini AI'}
                               </span>
                             )}
+                            {appliedRuleBase && (
+                              <span className="inline-flex items-center gap-1 text-xs ml-2 px-2 py-0.5 rounded-full border border-primary/40 text-primary bg-primary/5" title={`RuleBase applied (${rulebaseCount} rules)`}>
+                                <BookOpen className="h-3 w-3" /> RuleBase
+                                {typeof rulebaseCount === 'number' && rulebaseCount > 0 && (
+                                  <span className="opacity-80">({rulebaseCount})</span>
+                                )}
+                              </span>
+                            )}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1393,7 +1409,20 @@ export default function ComplianceCheckPage() {
 
         {/* Audit Logs Sidebar */}
         {selectedStandards.length > 0 && (
-          <div className="w-80 flex-shrink-0">
+          <div className={`relative ${isLogsCollapsed ? 'w-6' : 'w-80'} flex-shrink-0 transition-all duration-300`}>
+            {/* Drawer Toggle */}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute -left-3 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full shadow"
+              title={isLogsCollapsed ? 'Show Audit Logs' : 'Hide Audit Logs'}
+              aria-label={isLogsCollapsed ? 'Show Audit Logs' : 'Hide Audit Logs'}
+              onClick={() => setIsLogsCollapsed((v) => !v)}
+            >
+              {isLogsCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
+
+            {!isLogsCollapsed && (
             <Card className="h-fit sticky top-6">
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -1445,11 +1474,16 @@ export default function ComplianceCheckPage() {
                                   </span>
                                 </div>
                               </div>
-                              {isRecent && (
-                                <Badge variant="outline" className="text-xs border-primary text-primary">
-                                  New
-                                </Badge>
-                              )}
+                              <div className="flex flex-col items-end gap-1 ml-2">
+                                {isRecent && (
+                                  <Badge variant="outline" className="text-xs border-primary text-primary">New</Badge>
+                                )}
+                                <Link href={`/history?logId=${log._id}`} onClick={(e)=>e.stopPropagation()}>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 p-0" title="Open full report in History">
+                                    <Info className="h-4 w-4" />
+                                  </Button>
+                                </Link>
+                              </div>
                             </div>
                             
                             <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -1461,6 +1495,12 @@ export default function ComplianceCheckPage() {
                                 <AlertTriangle className="h-3 w-3" />
                                 {log.gapsCount} issues
                               </span>
+                              {log?.analysisMethod?.includes('+rulebase') && (
+                                <span className="flex items-center gap-1" title="RuleBase applied">
+                                  <BookOpen className="h-3 w-3 text-primary" />
+                                  RB
+                                </span>
+                              )}
                             </div>
                             
                             <div className="flex flex-wrap gap-1">
@@ -1475,13 +1515,7 @@ export default function ComplianceCheckPage() {
                                 </Badge>
                               )}
                             </div>
-                            <div className="ml-2">
-                              <Link href={`/history?logId=${log._id}`} onClick={(e)=>e.stopPropagation()}>
-                                <Button variant="ghost" size="icon" title="Open full report in History">
-                                  <Info className="h-4 w-4" />
-                                </Button>
-                              </Link>
-                            </div>
+                            
                             
                           </div>
                         </Card>
@@ -1500,6 +1534,7 @@ export default function ComplianceCheckPage() {
                 )}
               </CardContent>
             </Card>
+            )}
           </div>
         )}
       </div>
@@ -1516,14 +1551,19 @@ export default function ComplianceCheckPage() {
 
       {/* Audit Log Details Dialog */}
       <Dialog open={isLogDialogOpen} onOpenChange={setIsLogDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-6xl w-[96vw] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="h-5 w-5" />
               Audit Details
             </DialogTitle>
-            <DialogDescription>
-              Review the historical compliance result snapshot
+            <DialogDescription className="flex items-center justify-between gap-4">
+              <span>Review the historical compliance result snapshot</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${showIssues ? 'font-semibold' : ''}`}>Issues</span>
+                <Switch checked={!showIssues} onCheckedChange={(val)=> setShowIssues(!val)} />
+                <span className={`text-xs ${!showIssues ? 'font-semibold' : ''}`}>Suggestions</span>
+              </div>
             </DialogDescription>
           </DialogHeader>
 
@@ -1539,59 +1579,68 @@ export default function ComplianceCheckPage() {
                 <div className="flex items-center gap-2">
                   <Badge className={getStatusColor(selectedAuditLog.status)}>{selectedAuditLog.status}</Badge>
                   <Badge variant="outline">{selectedAuditLog.score}%</Badge>
+                  {(selectedAuditLog.snapshot?.rulebase?.applied || selectedAuditLog.analysisMethod?.includes('+rulebase')) && (
+                    <Badge variant="outline" className="flex items-center gap-1" title={`RuleBase ${selectedAuditLog.snapshot?.rulebase?.applied ? 'applied' : 'detected from method'}`}>
+                      <BookOpen className="h-3 w-3" />
+                      RuleBase
+                      {typeof selectedAuditLog.snapshot?.rulebase?.ruleCount === 'number' && selectedAuditLog.snapshot.rulebase.ruleCount > 0 && (
+                        <span>({selectedAuditLog.snapshot.rulebase.ruleCount})</span>
+                      )}
+                    </Badge>
+                  )}
                 </div>
               </div>
 
-              {/* Gaps */}
-              <div>
-                <h4 className="font-semibold mb-2 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  Issues ({selectedAuditLog.gapsCount})
-                </h4>
-                {selectedAuditLog.snapshot?.gaps && selectedAuditLog.snapshot.gaps.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
-                    {selectedAuditLog.snapshot.gaps.map((gap) => {
-                      const cfg = priorityConfig[gap.priority as keyof typeof priorityConfig];
-                      const IconComponent = cfg.icon;
-                      return (
-                        <Card key={gap.id} className={`${cfg.color}`}>
-                          <CardContent className="p-3">
-                            <div className="flex items-start gap-2">
-                              <IconComponent className={`h-4 w-4 ${cfg.iconColor} mt-0.5`} />
-                              <div>
-                                <div className="text-sm font-semibold">{gap.title}</div>
-                                <div className="text-xs text-muted-foreground">{gap.description}</div>
+              {showIssues ? (
+                <div>
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Issues ({selectedAuditLog.gapsCount})
+                  </h4>
+                  {selectedAuditLog.snapshot?.gaps && selectedAuditLog.snapshot.gaps.length > 0 ? (
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                      {selectedAuditLog.snapshot.gaps.map((gap) => {
+                        const cfg = priorityConfig[gap.priority as keyof typeof priorityConfig];
+                        const IconComponent = cfg.icon;
+                        return (
+                          <Card key={gap.id} className={`${cfg.color}`}>
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <IconComponent className={`h-5 w-5 ${cfg.iconColor} mt-0.5 flex-shrink-0`} />
+                                <div className="min-w-0">
+                                  <div className="text-sm font-semibold break-words whitespace-normal">{gap.title}</div>
+                                  <div className="text-xs text-muted-foreground break-words whitespace-normal">{gap.description}</div>
+                                </div>
+                                <div className="ml-auto">
+                                  <Badge className={`${cfg.badgeColor} text-xs`}>{cfg.label}</Badge>
+                                </div>
                               </div>
-                              <div className="ml-auto">
-                                <Badge className={`${cfg.badgeColor} text-xs`}>{cfg.label}</Badge>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No snapshot of issues stored for this audit.</p>
-                )}
-              </div>
-
-              {/* Suggestions */}
-              <div>
-                <h4 className="font-semibold mb-2 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4" />
-                  Suggestions
-                </h4>
-                {selectedAuditLog.snapshot?.suggestions && selectedAuditLog.snapshot.suggestions.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    {selectedAuditLog.snapshot.suggestions.map((s, idx) => (
-                      <li key={idx}>{s}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No suggestions snapshot stored.</p>
-                )}
-              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No snapshot of issues stored for this audit.</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Suggestions
+                  </h4>
+                  {selectedAuditLog.snapshot?.suggestions && selectedAuditLog.snapshot.suggestions.length > 0 ? (
+                    <ul className="list-disc list-inside space-y-2 text-sm max-h-[60vh] overflow-y-auto pr-1 break-words whitespace-normal">
+                      {selectedAuditLog.snapshot.suggestions.map((s, idx) => (
+                        <li key={idx} className="break-words whitespace-normal">{s}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No suggestions snapshot stored.</p>
+                  )}
+                </div>
+              )}
 
           </div>
           )}
