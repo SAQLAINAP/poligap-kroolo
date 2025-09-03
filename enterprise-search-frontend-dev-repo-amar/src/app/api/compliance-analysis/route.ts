@@ -3,7 +3,7 @@ import { getCompliancePrompt } from '@/lib/compliance-prompt';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-// Primary: Gemini AI with direct file upload
+// Fallback: Gemini AI with direct file upload
 async function analyzeWithGemini(file: File, selectedStandards: string[]): Promise<any> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -67,65 +67,21 @@ async function analyzeWithGemini(file: File, selectedStandards: string[]): Promi
   }
 }
 
-// Fallback: Kroolo AI with text extraction
-async function analyzeWithKrooloAI(file: File, selectedStandards: string[]): Promise<any> {
+// Primary: OpenAI (text-based)
+async function analyzeWithOpenAI(file: File, selectedStandards: string[]): Promise<any> {
   try {
-    // Extract text from file for Kroolo AI
     const documentContent = await extractTextFromFile(file);
+    if (!isReadable(documentContent)) {
+      throw new Error('Low-quality text extraction detected');
+    }
     const prompt = getCompliancePrompt(selectedStandards, documentContent);
-
-    const krooloApiUrl = process.env.NEXT_PUBLIC_REACT_APP_API_URL;
-    const krooloAiUrl = process.env.NEXT_PUBLIC_REACT_APP_API_URL_KROOLO_AI;
-
-    if (!krooloApiUrl || !krooloAiUrl) {
-      throw new Error('Kroolo AI endpoints not configured');
-    }
-
-    const requestData = {
-      prompt,
-      user_id: 'compliance_user',
-      organization_id: 'compliance_org',
-      session_id: `compliance_${Date.now()}`,
-      enable: true
-    };
-
-    // Try global chat endpoint first
-    let response = await fetch(`${krooloAiUrl}/global-chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestData)
-    });
-
-    if (!response.ok) {
-      // Try alternative endpoint
-      response = await fetch(`${krooloApiUrl}/kroolo-ai/chat-with-ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error(`Kroolo AI request failed: ${response.statusText}`);
-    }
-
-    const responseText = await response.text();
-
-    // Try to parse JSON response
-    try {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      } else {
-        return createStructuredResponseFromText(responseText);
-      }
-    } catch (parseError) {
-      return createStructuredResponseFromText(responseText);
-    }
-
+    const { createOpenAIAnalyzer } = await import('@/lib/openai-api');
+    const analyzer = createOpenAIAnalyzer();
+    const analysis = await analyzer.analyzeCompliance(prompt);
+    return analysis;
   } catch (error) {
-    console.error('Kroolo AI analysis failed:', error);
-    throw new Error(`Kroolo AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('OpenAI analysis failed:', error);
+    throw new Error(`OpenAI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -163,6 +119,26 @@ async function extractTextFromFile(file: File): Promise<string> {
   } catch (error) {
     throw new Error(`Text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+// Heuristic to detect poor/garbled extraction (module scope)
+function isReadable(text: string): boolean {
+  if (!text) return false;
+  const length = text.length;
+  const wordCount = (text.match(/\b\w+\b/g) || []).length;
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  const letterRatio = letters / Math.max(1, length);
+  const uniqueChars = new Set(text.split('')).size;
+  const uniqueRatio = uniqueChars / Math.max(1, length);
+  const avgWordLen = length / Math.max(1, wordCount);
+
+  // Minimum thresholds indicating likely readable prose
+  const longEnough = length >= 500 || wordCount >= 80;
+  const sufficientLetters = letterRatio >= 0.4; // avoid mostly-binary/garbage
+  const reasonableUniqueness = uniqueRatio >= 0.05; // avoid repeated same chars
+  const reasonableAvgWord = avgWordLen >= 3 && avgWordLen <= 12;
+
+  return longEnough && sufficientLetters && reasonableUniqueness && reasonableAvgWord;
 }
 
 // Create structured response from unstructured text
@@ -350,29 +326,29 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Try Gemini AI first (primary method with direct file upload)
+    // Try OpenAI first (primary)
     let analysisResult;
     let method = 'unknown';
 
     try {
-      console.log('Attempting Gemini AI analysis with direct file upload...');
-      analysisResult = await analyzeWithGemini(file, selectedStandards);
-      method = 'gemini-primary';
-      console.log('Gemini AI analysis completed successfully');
+      console.log('Attempting OpenAI analysis (text-based)...');
+      analysisResult = await analyzeWithOpenAI(file, selectedStandards);
+      method = 'openai-primary';
+      console.log('OpenAI analysis completed successfully');
 
-    } catch (geminiError) {
-      console.error('Gemini AI analysis failed, falling back to Kroolo AI:', geminiError);
+    } catch (openaiError) {
+      console.error('OpenAI analysis failed, falling back to Gemini:', openaiError);
 
       try {
-        console.log('Attempting Kroolo AI analysis with text extraction...');
-        analysisResult = await analyzeWithKrooloAI(file, selectedStandards);
-        method = 'kroolo-ai-fallback';
-        console.log('Kroolo AI analysis completed successfully');
+        console.log('Attempting Gemini AI analysis with direct file upload...');
+        analysisResult = await analyzeWithGemini(file, selectedStandards);
+        method = 'gemini-fallback';
+        console.log('Gemini AI analysis completed successfully');
 
-      } catch (krooloError) {
-        console.error('Both Gemini and Kroolo AI failed:', krooloError);
+      } catch (geminiError) {
+        console.error('Both OpenAI and Gemini failed:', geminiError);
         return NextResponse.json({
-          error: `Analysis failed with both AI services. Gemini: ${geminiError instanceof Error ? geminiError.message : 'Unknown error'}. Kroolo: ${krooloError instanceof Error ? krooloError.message : 'Unknown error'}`
+          error: `Analysis failed with both AI services. OpenAI: ${openaiError instanceof Error ? openaiError.message : 'Unknown error'}. Gemini: ${geminiError instanceof Error ? geminiError.message : 'Unknown error'}`
         }, { status: 500 });
       }
     }

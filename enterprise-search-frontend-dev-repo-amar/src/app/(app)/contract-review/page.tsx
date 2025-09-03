@@ -324,7 +324,7 @@ export default function ContractReview() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState<number>(1);
   const [reviews, setReviews] = useState<ContractReview[]>(initialReviews);
   const [selectedContractTypes, setSelectedContractTypes] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -1456,7 +1456,10 @@ The parties agree to the terms herein.`;
                       <CardTitle className="text-lg font-bold">Extracted Text (Highlighted)</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="prose dark:prose-invert max-w-none border rounded-md p-4" dangerouslySetInnerHTML={{ __html: highlightGaps(extractedDocument.fullText, extractedDocument.gaps) }} />
+                      <div
+                        className="prose dark:prose-invert max-w-none border rounded-md p-4"
+                        dangerouslySetInnerHTML={{ __html: highlightGaps(extractedDocument?.fullText ?? "", extractedDocument?.gaps ?? []) }}
+                      />
                     </CardContent>
                   </Card>
 
@@ -1464,33 +1467,40 @@ The parties agree to the terms herein.`;
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg font-bold">Identified Gaps</CardTitle>
-                        <Button variant="outline" size="sm" onClick={acceptAllSuggestions} disabled={!extractedDocument.gaps.length}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={acceptAllSuggestions}
+                          disabled={!((extractedDocument?.gaps?.length ?? 0) > 0)}
+                        >
                           <CheckCircle className="h-4 w-4 mr-2" />
                           Accept All
                         </Button>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {extractedDocument.gaps.length === 0 ? (
+                      {(extractedDocument?.gaps?.length ?? 0) === 0 ? (
                         <p className="text-sm text-muted-foreground">No gaps detected.</p>
                       ) : (
                         <div className="space-y-4">
-                          {extractedDocument.gaps.map((gap) => {
-                            const cfg = severityConfig[gap.severity];
+                          {(extractedDocument?.gaps ?? []).map((gap: DocumentGap) => {
                             return (
-                              <div key={gap.id} className={`rounded-md border p-4 ${cfg.border} ${cfg.bg}`}>
+                              <div key={gap.id} className="rounded-md border p-4 bg-background">
                                 <div className="flex items-center justify-between">
-                                  <div className={`text-sm font-bold capitalize ${cfg.text}`}>{gap.severity} • {gap.gapType.replace('-', ' ')}</div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs capitalize">{gap.severity}</Badge>
+                                    <div className="text-sm text-muted-foreground">{gap.gapType.replace('-', ' ')}</div>
+                                  </div>
                                   {gap.suggestedText && (
-                                    <Button size="sm" variant="secondary" onClick={() => applyGapSuggestion(gap)}>
+                                    <Button size="sm" variant="outline" onClick={() => applyGapSuggestion(gap)}>
                                       Apply Suggestion
                                     </Button>
                                   )}
                                 </div>
                                 <div className="mt-2 text-sm">
                                   <div className="font-semibold">{gap.sectionTitle}</div>
-                                  <div className="mt-1 text-foreground">{gap.description}</div>
-                                  <div className="mt-2 text-muted-foreground text-xs">Recommendation: {gap.recommendation}</div>
+                                  <div className="mt-1 text-muted-foreground">{gap.description}</div>
+                                  <div className="mt-2 text-xs text-muted-foreground">Recommendation: {gap.recommendation}</div>
                                 </div>
                               </div>
                             );
@@ -1553,26 +1563,29 @@ The parties agree to the terms herein.`;
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {(() => {
                           const counts = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>;
-                          // Prefer extractedDocument counts if available
                           if (extractedDocument?.gaps) {
                             extractedDocument.gaps.forEach(g => counts[g.severity] = (counts[g.severity] || 0) + 1);
                           }
                           const tiles = [
-                            { key: 'critical', label: 'Critical Issues', color: 'bg-red-600', icon: AlertTriangle },
-                            { key: 'high', label: 'High Priority', color: 'bg-orange-600', icon: AlertTriangle },
-                            { key: 'medium', label: 'Medium Risk', color: 'bg-amber-600', icon: FileText },
-                            { key: 'low', label: 'Low Priority', color: 'bg-green-600', icon: CheckCircle },
+                            { key: 'critical', label: 'Critical', icon: AlertTriangle },
+                            { key: 'high', label: 'High', icon: AlertTriangle },
+                            { key: 'medium', label: 'Medium', icon: FileText },
+                            { key: 'low', label: 'Low', icon: CheckCircle },
                           ];
-                          return tiles.map(({ key, label, color, icon: Icon }) => (
-                            <div key={key} className={`rounded-xl p-4 text-white shadow-md ${color}`}>
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="text-2xl font-extrabold leading-none">{counts[key] || 0}</div>
-                                  <div className="text-sm font-semibold opacity-95 mt-1">{label}</div>
+                          return tiles.map(({ key, label, icon: Icon }) => (
+                            <Card key={key} className="border-muted">
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="text-2xl font-bold leading-none">{counts[key] || 0}</div>
+                                    <div className="text-sm text-muted-foreground mt-1">{label} issues</div>
+                                  </div>
+                                  <Badge variant="outline" className="capitalize flex items-center gap-1">
+                                    <Icon className="h-3 w-3" /> {label}
+                                  </Badge>
                                 </div>
-                                <Icon className="h-5 w-5 opacity-90" />
-                              </div>
-                            </div>
+                              </CardContent>
+                            </Card>
                           ));
                         })()}
                       </div>
@@ -1591,14 +1604,14 @@ The parties agree to the terms herein.`;
                               <ul className="space-y-3">
                                 {extractedDocument?.gaps && extractedDocument.gaps.length > 0 ? (
                                   extractedDocument.gaps.map((g) => {
-                                    const color = g.severity === 'critical' ? 'bg-red-600' : g.severity === 'high' ? 'bg-orange-600' : g.severity === 'medium' ? 'bg-amber-600' : 'bg-green-600';
                                     return (
-                                      <li key={g.id} className="rounded-lg overflow-hidden">
-                                        <div className={`${color} text-white px-3 py-1 text-xs font-bold uppercase tracking-wide`}>{g.severity}</div>
-                                        <div className="p-3 border border-t-0 rounded-b-lg">
-                                          <div className="text-sm font-semibold">{g.sectionTitle} • {g.gapType.replace('-', ' ')}</div>
-                                          <div className="text-sm text-muted-foreground mt-1">{g.description}</div>
+                                      <li key={g.id} className="rounded-md border p-3">
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline" className="text-xs capitalize">{g.severity}</Badge>
+                                          <div className="text-sm font-medium">{g.sectionTitle}</div>
+                                          <span className="text-xs text-muted-foreground">• {g.gapType.replace('-', ' ')}</span>
                                         </div>
+                                        <div className="text-sm text-muted-foreground mt-1">{g.description}</div>
                                       </li>
                                     );
                                   })

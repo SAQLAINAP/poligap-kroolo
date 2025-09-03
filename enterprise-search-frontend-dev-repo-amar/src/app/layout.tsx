@@ -58,8 +58,8 @@ const Inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Kroolo | Enterprise Search",
-  description: "Kroolo Enterprise Search",
+  title: "Poligap AI",
+  description: "Poligap AI",
 };
 
 export default function RootLayout({
