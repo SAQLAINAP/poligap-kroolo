@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CheckSquare, Plus, Filter, Check, RotateCcw, Trash2, Shield, FileText } from "lucide-react";
+import { CheckSquare, Plus, Filter, Check, RotateCcw, Trash2, Shield, FileText, Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Task {
   _id?: string;
@@ -21,6 +22,8 @@ interface Task {
   category?: string;
   source?: "compliance" | "contract" | "manual";
   sourceRef?: Record<string, any>;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Dynamic tasks loaded from API
@@ -56,6 +59,8 @@ export default function MyTasksPage() {
   const [activeTab, setActiveTab] = useState("all"); // status
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoTask, setInfoTask] = useState<Task | null>(null);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -345,8 +350,18 @@ export default function MyTasksPage() {
                           <CardTitle className="text-base font-semibold leading-tight line-clamp-1 mt-0 mb-0">{task.title}</CardTitle>
                           <CardDescription className="text-sm leading-tight line-clamp-2 mt-0 mb-0">{getSuggestedFix(task.description)}</CardDescription>
                         </div>
-                        <div className="flex flex-col items-end gap-1 min-w-[84px]">
+                        <div className="flex flex-col items-end gap-1 min-w-[116px]">
                           <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => { setInfoTask(task); setInfoOpen(true); }}
+                            title="Task info"
+                            aria-label="Task info"
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
                           {task.status !== 'completed' ? (
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => updateTask(task, { status: 'completed' })} title="Mark as complete">
                               <Check className="h-4 w-4" />
@@ -375,6 +390,50 @@ export default function MyTasksPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Info Dialog */}
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Task Information</DialogTitle>
+            <DialogDescription>Details about the document and analysis.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <div>
+              <span className="font-medium">Document:</span>{' '}
+              <span>{(infoTask?.sourceRef && (infoTask.sourceRef.fileName || infoTask.sourceRef.documentName)) || 'Unknown'}</span>
+            </div>
+            {infoTask?.sourceRef?.standard && (
+              <div>
+                <span className="font-medium">Standards:</span>{' '}
+                <span>{infoTask.sourceRef.standard}</span>
+              </div>
+            )}
+            <div>
+              <span className="font-medium">Analysis time:</span>{' '}
+              <span>
+                {(() => {
+                  const iso = (infoTask?.sourceRef?.analyzedAt as string) || infoTask?.createdAt;
+                  if (!iso) return 'Unknown';
+                  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+                })()}
+              </span>
+            </div>
+            {infoTask?.source && (
+              <div>
+                <span className="font-medium">Source:</span>{' '}
+                <span className="capitalize">{infoTask.source}</span>
+              </div>
+            )}
+            {infoTask?.sourceRef?.resultId && (
+              <div className="text-xs text-muted-foreground">Result ID: {infoTask.sourceRef.resultId}</div>
+            )}
+            {infoTask?.sourceRef?.gapId && (
+              <div className="text-xs text-muted-foreground">Gap ID: {infoTask.sourceRef.gapId}</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

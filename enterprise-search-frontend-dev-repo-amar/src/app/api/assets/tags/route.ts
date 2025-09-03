@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
+interface AssetDoc {
+  _id: ObjectId;
+  tags?: string[];
+  updatedAt?: Date;
+}
+
 // POST - Add tags to multiple assets
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +26,7 @@ export async function POST(request: NextRequest) {
     
     // Add tags to existing tags (avoid duplicates)
     const result = await db
-      .collection('assets')
+      .collection<AssetDoc>('assets')
       .updateMany(
         { _id: { $in: objectIds } },
         { 
@@ -62,11 +68,11 @@ export async function DELETE(request: NextRequest) {
     
     // Remove tags from assets
     const result = await db
-      .collection('assets')
+      .collection<AssetDoc>('assets')
       .updateMany(
         { _id: { $in: objectIds } },
         { 
-          $pullAll: { tags: tags },
+          $pull: { tags: { $in: tags } },
           $set: { updatedAt: new Date() }
         }
       );

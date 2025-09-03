@@ -165,7 +165,7 @@ export function AssetPicker({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-[90vw] max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-[1100px] w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -237,7 +237,7 @@ export function AssetPicker({
                     key={asset._id} 
                     className={`cursor-pointer transition-all hover:shadow-md ${
                       isSelected ? 'ring-2 ring-primary bg-primary/5' : ''
-                    } ${viewMode === 'list' ? 'p-3' : ''}`}
+                    } ${viewMode === 'list' ? 'p-2' : ''}`}
                     onClick={() => handleAssetSelect(asset)}
                   >
                     {viewMode === 'grid' ? (
@@ -271,11 +271,11 @@ export function AssetPicker({
                         
                         <div className="space-y-2">
                           <div className="min-w-0">
-                            <h4 className="font-medium text-sm truncate" title={asset.originalName}>
+                            <h4 className="font-medium leading-snug text-[clamp(0.85rem,1vw,1rem)] line-clamp-2 break-words" title={asset.originalName}>
                               {asset.originalName}
                             </h4>
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+                          <div className="flex items-center gap-2 text-[clamp(0.7rem,0.9vw,0.85rem)] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
                             <span className="shrink-0">{formatFileSize(asset.size)}</span>
                             <span className="shrink-0">•</span>
                             <span className="shrink-0">{new Date(asset.uploadDate).toLocaleDateString()}</span>
@@ -297,7 +297,7 @@ export function AssetPicker({
                         </div>
                       </CardContent>
                     ) : (
-                      <div className="flex items-start gap-4 p-3">
+                      <div className="flex items-start gap-3 p-2">
                         {multiple && (
                           <Checkbox
                             checked={!!isSelected}
@@ -306,8 +306,8 @@ export function AssetPicker({
                         )}
                         {getFileIcon(asset.mimetype)}
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-medium whitespace-normal break-words">{asset.originalName}</h4>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                          <h4 className="font-medium whitespace-normal break-words text-[clamp(0.85rem,1vw,1rem)]">{asset.originalName}</h4>
+                          <div className="flex items-center gap-3 text-[clamp(0.75rem,0.95vw,0.9rem)] text-muted-foreground flex-wrap">
                             <span>{formatFileSize(asset.size)}</span>
                             <span>{new Date(asset.uploadDate).toLocaleDateString()}</span>
                             <span className="capitalize">{asset.category}</span>

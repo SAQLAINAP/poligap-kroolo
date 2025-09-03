@@ -30,7 +30,7 @@ export interface ComplianceAnalysisResult {
 }
 
 export class GeminiComplianceAnalyzer {
-  private genAI: GoogleGenerativeAI;
+  private genAI: any;
   private model: any;
 
   constructor(apiKey: string) {

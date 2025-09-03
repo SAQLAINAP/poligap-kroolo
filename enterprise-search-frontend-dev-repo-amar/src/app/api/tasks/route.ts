@@ -19,6 +19,7 @@ interface TaskDoc {
     gapId?: string;
     fileName?: string;
     standard?: string;
+    analyzedAt?: string; // ISO timestamp when the analysis was performed
   };
   createdAt: Date;
   updatedAt: Date;

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Shield, Upload, FileText, AlertTriangle, CheckCircle, Eye, Download, Heart, Globe, MapPin, TrendingUp, CreditCard, Lock, Award, Building, GraduationCap, Landmark, Users, Plane, Factory, Zap, Car, Pill, Database, Radio, Flag, Star, Crown, Network, Cpu, ChevronRight, ChevronLeft, FolderOpen, Filter, X, AlertCircle, Info, Minus, History, Calendar, TrendingDown, TrendingUp as TrendingUpIcon, Plus, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AssetPicker } from "@/components/AssetPicker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -378,6 +379,7 @@ const priorityConfig = {
 const initialResults: ComplianceResult[] = [];
 
 export default function ComplianceCheckPage() {
+  const router = useRouter();
   const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -420,6 +422,21 @@ export default function ComplianceCheckPage() {
       } as File;
       
       setUploadedFile(mockFile);
+    }
+  };
+
+  // Save current results (for safety) and navigate away
+  const handleSaveAndExit = async () => {
+    try {
+      if (results && results.length > 0) {
+        for (const r of results) {
+          await saveAuditLog(r);
+        }
+      }
+    } catch (e) {
+      console.error('Save & Exit failed to save some logs', e);
+    } finally {
+      router.push('/');
     }
   };
 
@@ -675,7 +692,7 @@ export default function ComplianceCheckPage() {
     description?: string;
     priority: "critical" | "high" | "medium" | "low";
     category?: string;
-    sourceRef?: { resultId?: string; gapId?: string; fileName?: string; standard?: string };
+    sourceRef?: { resultId?: string; gapId?: string; fileName?: string; standard?: string; analyzedAt?: string };
   }, options?: { dedupeKey?: string }) => {
     try {
       const key = options?.dedupeKey;
@@ -695,7 +712,11 @@ export default function ComplianceCheckPage() {
           priority: payload.priority,
           category: payload.category,
           source: 'compliance',
-          sourceRef: payload.sourceRef,
+          // include analysis timestamp for better task context
+          sourceRef: {
+            ...payload.sourceRef,
+            analyzedAt: payload.sourceRef?.analyzedAt || new Date().toISOString(),
+          },
         })
       });
       if (!res.ok) {
@@ -1318,6 +1339,12 @@ export default function ComplianceCheckPage() {
                       )}
                     </div>
                   ))}
+                  {/* Save & Exit CTA */}
+                  <div className="pt-6 mt-4 border-t flex justify-end">
+                    <Button size="lg" onClick={handleSaveAndExit} disabled={isAnalyzing || results.length === 0}>
+                      Save & Exit
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1515,16 +1542,6 @@ export default function ComplianceCheckPage() {
                 </div>
               </div>
 
-              {/* Redirect Tabs to History */}
-              <div className="flex items-center gap-2">
-                <Link href={`/history?logId=${selectedAuditLog._id}&tab=issues`}>
-                  <Button size="sm" variant="secondary">Open Full Issues</Button>
-                </Link>
-                <Link href={`/history?logId=${selectedAuditLog._id}&tab=suggestions`}>
-                  <Button size="sm" variant="secondary">Open Full Suggestions</Button>
-                </Link>
-              </div>
-
               {/* Gaps */}
               <div>
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
@@ -1532,7 +1549,7 @@ export default function ComplianceCheckPage() {
                   Issues ({selectedAuditLog.gapsCount})
                 </h4>
                 {selectedAuditLog.snapshot?.gaps && selectedAuditLog.snapshot.gaps.length > 0 ? (
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
                     {selectedAuditLog.snapshot.gaps.map((gap) => {
                       const cfg = priorityConfig[gap.priority as keyof typeof priorityConfig];
                       const IconComponent = cfg.icon;
