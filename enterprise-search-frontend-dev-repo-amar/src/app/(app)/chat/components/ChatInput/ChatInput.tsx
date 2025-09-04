@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LucideSendHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,20 @@ import { SelectMetaProperties } from "./SelectMetaProperties";
 import { toastError } from "@/components/toast-varients";
 import { cn } from "@/lib/utils";
 import { useCompanyStore } from "@/stores/company-store";
+
+// Parse @mentions like @contract_2023
+function parseMentions(text: string): string[] {
+  if (!text) return [];
+  const set = new Set<string>();
+  const re = /@([A-Za-z0-9_\-.]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) set.add(m[0]);
+  return Array.from(set);
+}
+
+function normalizeMentionName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, "_");
+}
 
 const ChatInput = ({
   agent_id,
@@ -118,6 +132,71 @@ const ChatInput = ({
     }
   };
 
+  // Mention state
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
+  const mentionRangeRef = useRef<{ start: number; end: number } | null>(null);
+
+  // Fetch suggestions for mention
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      if (!mentionOpen || !mentionQuery) {
+        setMentionSuggestions([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/assets?search=${encodeURIComponent(mentionQuery)}`);
+        if (!active) return;
+        if (res.ok) {
+          const data = await res.json();
+          setMentionSuggestions(Array.isArray(data?.assets) ? data.assets.slice(0, 6) : []);
+        } else {
+          setMentionSuggestions([]);
+        }
+      } catch {
+        if (active) setMentionSuggestions([]);
+      }
+    };
+    const t = setTimeout(run, 180);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [mentionQuery, mentionOpen]);
+
+  const insertMentionAtCursor = (token: string) => {
+    const el = chatInputRef.current as HTMLTextAreaElement | null;
+    const current = inputMessage || "";
+    if (!el || !mentionRangeRef.current) {
+      setInputMessage(`${current} ${token} `);
+      setMentionOpen(false);
+      setMentionSuggestions([]);
+      return;
+    }
+    const { start, end } = mentionRangeRef.current;
+    const before = current.slice(0, start);
+    const after = current.slice(end);
+    const next = `${before}${token}${after}`;
+    setInputMessage(next);
+    const caret = (before + token).length;
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus();
+        el.selectionStart = el.selectionEnd = caret + 1;
+      }
+    });
+    setMentionOpen(false);
+    setMentionSuggestions([]);
+  };
+
+  const handleRemoveMention = (token: string) => {
+    const current = inputMessage || "";
+    const next = current.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "").replace(/\s{2,}/g, " ").trim();
+    setInputMessage(next);
+  };
+
   const handleSubmit = async () => {
     // debugger;
     if (!(inputMessage || "").trim()) return;
@@ -137,34 +216,20 @@ const ChatInput = ({
       const messagesArray = messages || [];
 
       if (handleCreateConversation) {
-        // debugger;
-        if (messagesArray.length === 0 && selectedConversation?._id === "") {
-          if (isGlobalAgent) {
-            createdConvo = await handleCreateConversation(companyId ?? "");
-          } else {
-            createdConvo = await handleCreateConversation(agent_id);
-          }
-        } else if (
-          messagesArray.length === 0 &&
-          selectedConversation?._id !== ""
-        ) {
-          createdConvo = selectedConversation ?? {
-            _id: "",
-            chatName: "",
-            createdAt: new Date().toISOString(),
-          };
+        // On first message, ensure a conversation exists
+        if (messagesArray.length === 0 && (!selectedConversation || selectedConversation._id === "")) {
+          createdConvo = await handleCreateConversation();
+        } else if (messagesArray.length === 0 && selectedConversation && selectedConversation._id !== "") {
+          createdConvo = selectedConversation;
         } else {
-          createdConvo = selectedConversation ?? {
-            _id: "",
-            chatName: "",
-            createdAt: new Date().toISOString(),
-          };
+          createdConvo = selectedConversation ?? createdConvo;
         }
       }
       if (messagesArray.length === 0) {
         if (generateTitle) {
           console.log("generateTitle =>");
-          generateTitle(inputMessage);
+          const convoIdForTitle = createdConvo?._id || selectedConversation?._id || "";
+          generateTitle(inputMessage, convoIdForTitle);
         }
       }
 
@@ -188,6 +253,8 @@ const ChatInput = ({
     .filter((option: MultiSelectOption) => option.enabled)
     .map((option) => option.id);
 
+  const mentionChips = useMemo(() => parseMentions(inputMessage || ""), [inputMessage]);
+
   return (
     <div className="font-inter mx-auto flex w-full max-w-6xl flex-col rounded-xl border p-3">
       <div className="flex">
@@ -206,11 +273,49 @@ const ChatInput = ({
         )}
       </div>
 
-      <div className="flex w-full">
+      {/* Mention chips */}
+      {mentionChips.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {mentionChips.map((m) => (
+            <span
+              key={m}
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+            >
+              {m}
+              <button
+                type="button"
+                onClick={() => handleRemoveMention(m)}
+                className="ml-1 text-muted-foreground hover:text-foreground"
+                aria-label={`Remove ${m}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="relative flex w-full">
         <textarea
           placeholder="Ask anything..."
           value={inputMessage || ""}
-          onChange={(e) => setInputMessage(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setInputMessage(val);
+            const el = e.target as HTMLTextAreaElement;
+            const caret = el.selectionStart;
+            const prefix = val.slice(0, caret);
+            const m = /@([A-Za-z0-9_\-.]{0,50})$/.exec(prefix);
+            if (m) {
+              setMentionOpen(true);
+              setMentionQuery(m[1]);
+              mentionRangeRef.current = { start: caret - m[0].length, end: caret };
+            } else {
+              setMentionOpen(false);
+              setMentionQuery("");
+              mentionRangeRef.current = null;
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !isStreamingResponse) {
               e.preventDefault();
@@ -221,6 +326,32 @@ const ChatInput = ({
           disabled={!agent_id || isStreamingResponse}
           ref={chatInputRef}
         />
+
+        {/* Suggestions dropdown */}
+        {mentionOpen && mentionSuggestions.length > 0 && (
+          <div className="absolute bottom-10 left-0 z-[1600] w-80 max-w-[90%] rounded-md border bg-popover p-2 shadow-md">
+            <div className="mb-1 text-xs text-muted-foreground">Insert asset mention</div>
+            <ul className="max-h-64 overflow-auto">
+              {mentionSuggestions.map((a) => {
+                const display = a.originalName || a.filename || a.url;
+                const token = `@${normalizeMentionName(display)}`;
+                return (
+                  <li key={a._id}>
+                    <button
+                      type="button"
+                      onClick={() => insertMentionAtCursor(token)}
+                      className="block w-full truncate rounded px-2 py-1 text-left text-sm hover:bg-accent"
+                      title={display}
+                    >
+                      {display}
+                      <span className="ml-2 text-xs text-muted-foreground">{token}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </div>
       <div className="mt-2 flex flex-row justify-between">
         <div className="flex gap-2">

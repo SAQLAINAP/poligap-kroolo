@@ -413,7 +413,7 @@ export interface AgentType {
   setSelectedModel?: (model: string) => void;
   setSelectedLanguage?: (language: SelectedLanguageType) => void;
   handleCreateConversation?: (
-    agentId: string
+    agentId?: string
   ) => Promise<AgentSelectedChatType>;
   exportReactComponentAsPDF?: (
     component: React.ReactElement,
@@ -429,7 +429,7 @@ export interface AgentType {
     name: string;
   };
   medias?: MediaTypeProps[];
-  generateTitle?: (input: string) => void;
+  generateTitle?: (input: string, conversationIdOverride?: string) => void;
   isGlobalAgent?: boolean;
   handleCreateProject?: (content: PlaygroundChatMessage) => void;
   handleCreateDoc?: (content: PlaygroundChatMessage) => Promise<void>;
@@ -474,7 +474,7 @@ export interface UseStreamHandlerProps {
   };
   isPublic?: boolean;
   handleCreateConversation?: (
-    agentId: string
+    agentId?: string
   ) => Promise<AgentSelectedChatType>;
   selectedConversation?: AgentSelectedChatType;
   user_description?: string;
