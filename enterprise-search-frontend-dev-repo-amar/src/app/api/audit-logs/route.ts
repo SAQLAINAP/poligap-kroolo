@@ -43,14 +43,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const standards = searchParams.get('standards')?.split(',') || [];
     const limit = parseInt(searchParams.get('limit') || '20');
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'userId is required' },
+        { status: 400 }
+      );
+    }
     
     const db = await connectToDatabase();
     const collection = db.collection<AuditLog>('audit_logs');
     
     // Build query to match any of the selected standards
-    const query = standards.length > 0 
-      ? { standards: { $in: standards } }
-      : {};
+    const query: Record<string, any> = {
+      userId,
+      ...(standards.length > 0 ? { standards: { $in: standards } } : {}),
+    };
     
     const logs = await collection
       .find(query)

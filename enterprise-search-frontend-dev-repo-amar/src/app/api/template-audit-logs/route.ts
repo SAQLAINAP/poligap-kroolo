@@ -32,15 +32,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const templateId = searchParams.get('templateId');
     const limit = parseInt(searchParams.get('limit') || '20');
+    const userId = searchParams.get('userId');
     if (!templateId) {
       return NextResponse.json({ success: false, error: 'templateId is required' }, { status: 400 });
+    }
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'userId is required' }, { status: 400 });
     }
 
     const db = await connectToDatabase();
     const collection = db.collection<TemplateAuditLog>('template_audit_logs');
 
     const logs = await collection
-      .find({ templateId })
+      .find({ templateId, userId })
       .sort({ analysisDate: -1 })
       .limit(limit)
       .toArray();

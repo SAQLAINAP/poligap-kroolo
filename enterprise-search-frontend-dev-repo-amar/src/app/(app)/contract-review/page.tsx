@@ -400,7 +400,12 @@ export default function ContractReview() {
     setLogsLoading(true);
     setLogsError(null);
     try {
-      const res = await fetch(`/api/template-audit-logs?templateId=${encodeURIComponent(selectedTemplate.id)}&limit=20`);
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
+      const params = new URLSearchParams();
+      params.set('templateId', selectedTemplate.id);
+      params.set('limit', '20');
+      if (userId) params.set('userId', userId);
+      const res = await fetch(`/api/template-audit-logs?${params.toString()}`);
       const data = await res.json();
       if (data?.success) {
         setTemplateLogs(data.logs || []);

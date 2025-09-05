@@ -467,7 +467,12 @@ export default function ComplianceCheckPage() {
     
     setIsLoadingLogs(true);
     try {
-      const response = await fetch(`/api/audit-logs?standards=${standards.join(',')}&limit=20`);
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
+      const query = new URLSearchParams();
+      if (userId) query.set('userId', userId);
+      if (standards.length > 0) query.set('standards', standards.join(','));
+      query.set('limit', '20');
+      const response = await fetch(`/api/audit-logs?${query.toString()}`);
       const data = await response.json();
       
       if (data.success) {
@@ -482,6 +487,7 @@ export default function ComplianceCheckPage() {
 
   const saveAuditLog = async (result: ComplianceResult) => {
     try {
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
       const auditLogData = {
         fileName: result.fileName,
         standards: selectedStandards,
@@ -490,6 +496,7 @@ export default function ComplianceCheckPage() {
         gapsCount: result.gaps.length,
         fileSize: uploadedFile?.size || 0,
         analysisMethod: analysisMethod || 'standard',
+        userId: userId || undefined,
         snapshot: {
           gaps: result.gaps,
           suggestions: result.suggestions,

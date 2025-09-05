@@ -125,7 +125,7 @@ export default function SignInPage() {
         const userId = result.data.data.userData.userId;
         localStorage.setItem("user_id", userId);
 
-        router.push("/org-list");
+        router.push("/home");
       } else {
         toastError("Facing Some problem in signin.", "Please try again.");
       }
@@ -156,14 +156,13 @@ export default function SignInPage() {
 
             <div className="space-y-2">
               <h1 className="text-xl font-semibold">
-                Welcome to{" "}
-                <span className="text-base-purple">Kroolo AI Search</span>
+                Empower Your Compliance Journey with{" "}
+                <span className="text-base-purple">PoliGap AI</span>
               </h1>
               <p className="text-gray-700 dark:text-gray-300 text-xs leading-relaxed">
-                Unlock your team&apos;s knowledge base with AI-powered insights.
+                Unlock a smarter, faster way to master compliance with PoliGap AI’s advanced technology.
                 <br />
-                Let Kroolo AI Search help you find answers quickly and
-                effortlessly.
+                This empowers your team to prioritize growth while we handle the complexity of compliance challenges.
               </p>
             </div>
           </div>

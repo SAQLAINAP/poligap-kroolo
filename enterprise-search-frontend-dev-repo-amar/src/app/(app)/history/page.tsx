@@ -64,7 +64,9 @@ export default function HistoryPage() {
     const fetchLogs = async () => {
       setLoading(true);
       try {
-        const resp = await fetch('/api/audit-logs');
+        const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
+        const url = userId ? `/api/audit-logs?userId=${encodeURIComponent(userId)}` : '/api/audit-logs';
+        const resp = await fetch(url);
         const data = await resp.json();
         if (Array.isArray(data.logs)) {
           setLogs(data.logs);
@@ -116,7 +118,9 @@ export default function HistoryPage() {
           // Refresh
           try {
             setLoading(true);
-            const resp = await fetch('/api/audit-logs');
+            const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
+            const url = userId ? `/api/audit-logs?userId=${encodeURIComponent(userId)}` : '/api/audit-logs';
+            const resp = await fetch(url);
             const data = await resp.json();
             setLogs(Array.isArray(data.logs) ? data.logs : []);
           } finally {
