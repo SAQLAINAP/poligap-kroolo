@@ -26,10 +26,11 @@ interface ComplianceStandard {
 interface ComplianceGap {
   id: string;
   title: string;
-  description: string;
+  description: string; // concise one-liner
   priority: "critical" | "high" | "medium" | "low";
   category: string;
-  recommendation: string;
+  recommendation: string; // kept for history compatibility
+  justification?: string; // evidence citation or excerpt from the document
   section?: string;
 }
 
@@ -594,13 +595,34 @@ export default function ComplianceCheckPage() {
               priority = 'low';
             }
             
+            // Build concise one-liner description (keep header/title as-is)
+            const oneLiner = (gap
+              .replace(/\s+/g, ' ')
+              .split(/[\.!?]/)[0]
+              .trim()
+            ).slice(0, 140);
+
+            // Try to extract justification/evidence from analysis if present
+            const jSrc =
+              (standardAnalysis.justifications && standardAnalysis.justifications[gapIndex]) ||
+              (standardAnalysis.evidence && standardAnalysis.evidence[gapIndex]) ||
+              (standardAnalysis.citations && standardAnalysis.citations[gapIndex]) ||
+              (standardAnalysis.quotes && standardAnalysis.quotes[gapIndex]) ||
+              null;
+            const justification = typeof jSrc === 'string'
+              ? `The document states: "${jSrc}"`
+              : jSrc?.text
+                ? `The document states: "${jSrc.text}"`
+                : `The document indicates: ${oneLiner}.`;
+
             return {
               id: `gap-${index}-${gapIndex}`,
               title: gap.split('.')[0]?.trim() || gap.substring(0, 80).trim(),
-              description: gap.replace(/•$/, '').trim(),
+              description: oneLiner,
               priority,
               category: standardAnalysis.standard || 'General',
               recommendation: `Address this ${priority} priority gap by implementing proper compliance measures for ${standardAnalysis.standard}.`,
+              justification,
               section: `${standardAnalysis.standard} Analysis`
             };
           });
@@ -609,15 +631,21 @@ export default function ComplianceCheckPage() {
         
         // Process critical issues as critical priority gaps
         if (standardAnalysis.criticalIssues && standardAnalysis.criticalIssues.length > 0) {
-          const criticalGaps = standardAnalysis.criticalIssues.map((issue: string, issueIndex: number) => ({
-            id: `critical-${index}-${issueIndex}`,
-            title: issue.split('.')[0]?.trim() || issue.substring(0, 80).trim(),
-            description: issue.replace(/•$/, '').trim(),
-            priority: 'critical' as const,
-            category: standardAnalysis.standard || 'General',
-            recommendation: `This critical issue requires immediate attention and comprehensive remediation for ${standardAnalysis.standard} compliance.`,
-            section: `${standardAnalysis.standard} Critical Issues`
-          }));
+          const criticalGaps = standardAnalysis.criticalIssues.map((issue: string, issueIndex: number) => {
+            const oneLiner = (issue.replace(/•$/, '').trim().split(/[\.!?]/)[0] || issue).slice(0, 140);
+            const ev = standardAnalysis?.criticalEvidence && (standardAnalysis.criticalEvidence[issueIndex]?.text || standardAnalysis.criticalEvidence[issueIndex]);
+            const justification = ev ? `The document states: "${ev}"` : `The document indicates: ${oneLiner}.`;
+            return ({
+              id: `critical-${index}-${issueIndex}`,
+              title: issue.split('.')[0]?.trim() || issue.substring(0, 80).trim(),
+              description: oneLiner,
+              priority: 'critical' as const,
+              category: standardAnalysis.standard || 'General',
+              recommendation: `This critical issue requires immediate attention and comprehensive remediation for ${standardAnalysis.standard} compliance.`,
+              justification,
+              section: `${standardAnalysis.standard} Critical Issues`
+            });
+          });
           allGaps.push(...criticalGaps);
         }
         
@@ -820,7 +848,7 @@ export default function ComplianceCheckPage() {
 
 
       {/* Step Content */}
-      <Card className="min-h-[600px]">
+      <Card>
         <CardContent className="p-10">
           {/* Step 1: Select Compliance Standards */}
           {currentStep === 1 && (
@@ -1245,7 +1273,7 @@ export default function ComplianceCheckPage() {
                                                       disabled={addingTaskKeys.has(`gap:${result.id}:${gap.id}`) || addedTaskKeys.has(`gap:${result.id}:${gap.id}`)}
                                                       onClick={() => addTask({
                                                         title: gap.title,
-                                                        description: `${gap.description} \nRecommended: ${gap.recommendation}`,
+                                                        description: gap.description,
                                                         priority: gap.priority,
                                                         category: gap.category,
                                                         sourceRef: { resultId: result.id, gapId: gap.id, fileName: result.fileName, standard: result.standard }
@@ -1276,15 +1304,7 @@ export default function ComplianceCheckPage() {
                                                   </span>
                                                 </div>
                                                 
-                                                <div className="mt-4 p-3 bg-white/60 dark:bg-black/30 rounded-lg border">
-                                                  <div className="flex items-start gap-2">
-                                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                                                    <div>
-                                                      <p className="font-semibold text-xs text-green-800 dark:text-green-200 mb-1">Recommended Action:</p>
-                                                      <p className="text-xs leading-relaxed">{gap.recommendation}</p>
-                                                    </div>
-                                                  </div>
-                                                </div>
+                                                {/* Justification box removed per requirement: avoid hypothetical data */}
                                               </div>
                                             </CardContent>
                                           </Card>
