@@ -30,6 +30,49 @@ export default function AIAgentsPage() {
     setOpen(true);
   };
 
+  // Law Scanner: state and helpers
+  type LawUpdate = { id: string; title: string; url: string; date: string; source: string; summary?: string };
+  const [lawIndustry, setLawIndustry] = useState("");
+  const [lawRegion, setLawRegion] = useState("");
+  const [lawOrgType, setLawOrgType] = useState("");
+  const [lawMonths, setLawMonths] = useState<number>(3);
+  const [lawKeywords, setLawKeywords] = useState("");
+  const [lawLoading, setLawLoading] = useState(false);
+  const [lawResults, setLawResults] = useState<LawUpdate[]>([]);
+  const [lawCount, setLawCount] = useState<number | null>(null);
+
+  const scanUpdates = async () => {
+    setLawLoading(true);
+    setLawResults([]);
+    setLawCount(null);
+    try {
+      const res = await fetch("/api/law-scanner/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          industry: lawIndustry,
+          region: lawRegion,
+          orgType: lawOrgType,
+          monthsBack: lawMonths,
+          keywords: lawKeywords,
+        }),
+      });
+      const data = await res.json();
+      if (Array.isArray(data?.items)) {
+        setLawResults(data.items as LawUpdate[]);
+        setLawCount(data.items.length);
+      } else {
+        setLawResults([]);
+        setLawCount(0);
+      }
+    } catch (e) {
+      setLawResults([]);
+      setLawCount(0);
+    } finally {
+      setLawLoading(false);
+    }
+  };
+
   const closeModal = () => setOpen(false);
   // Email Notifier: state and helpers
   const emailActions = useMemo(
@@ -114,7 +157,7 @@ export default function AIAgentsPage() {
     }
   };
   return (
-    <div className="fixed inset-0 overflow-hidden bg-gray-50 flex flex-col items-center px-1 sm:px-2">
+    <div className="h-full min-h-0 overflow-hidden bg-gray-50 flex flex-col items-center px-1 sm:px-2">
       {/* Header */}
       <div className="text-center w-full max-w-screen-2xl pt-4 pb-3">
         <h1 className="text-2xl font-semibold text-purple-600 flex items-center justify-center gap-2">
@@ -333,6 +376,64 @@ export default function AIAgentsPage() {
                               Sent: <span className="font-semibold text-green-700">{sendResult.sent}</span> • Failed: <span className="font-semibold text-red-700">{sendResult.failed}</span>
                             </div>
                           )}
+                        </div>
+                      </div>
+                    ) : activeAgent === "Law Scanner" ? (
+                      <div className="mt-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                          <div className="lg:col-span-2">
+                            <label className="block text-xs text-gray-500 mb-1">Industry / Domain</label>
+                            <input type="text" value={lawIndustry} onChange={(e)=>setLawIndustry(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g., FinTech, Healthcare" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Region / Country</label>
+                            <input type="text" value={lawRegion} onChange={(e)=>setLawRegion(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g., US, EU, India" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Org Type</label>
+                            <select value={lawOrgType} onChange={(e)=>setLawOrgType(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm">
+                              <option value="">Select…</option>
+                              <option value="startup">Startup</option>
+                              <option value="smb">SMB</option>
+                              <option value="enterprise">Enterprise</option>
+                              <option value="public">Public Sector</option>
+                              <option value="nonprofit">Non-profit</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Months Back</label>
+                            <select value={lawMonths} onChange={(e)=>setLawMonths(parseInt(e.target.value||"3"))} className="w-full border rounded-md px-3 py-2 text-sm">
+                              {[1,2,3,6,12].map(m=> (<option key={m} value={m}>{m}</option>))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Additional Keywords (optional)</label>
+                          <input type="text" value={lawKeywords} onChange={(e)=>setLawKeywords(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g., privacy, payments, aml" />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button onClick={scanUpdates} disabled={lawLoading} className="px-4 py-2 rounded-md text-sm text-white bg-black disabled:opacity-50">{lawLoading? 'Scanning…' : 'Scan Updates'}</button>
+                          {lawCount != null && (
+                            <div className="text-xs text-gray-600">Found <span className="font-semibold">{lawCount}</span> recent updates</div>
+                          )}
+                        </div>
+                        <div className="border rounded-lg divide-y max-h-72 overflow-y-auto bg-white">
+                          {lawLoading && (
+                            <div className="p-4 text-sm text-gray-600">Loading latest updates…</div>
+                          )}
+                          {!lawLoading && lawResults.length === 0 && (
+                            <div className="p-4 text-sm text-gray-500">No results yet. Adjust filters and click Scan Updates.</div>
+                          )}
+                          {lawResults.map((r: LawUpdate) => (
+                            <div key={r.id} className="p-3">
+                              <div className="text-sm font-medium text-gray-800 flex items-center gap-2">
+                                <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-100 text-purple-800">{r.source}</span>
+                                <a href={r.url} target="_blank" rel="noreferrer" className="hover:underline">{r.title}</a>
+                              </div>
+                              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{r.summary}</div>
+                              <div className="text-xs text-gray-500 mt-1">{r.date}</div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ) : (

@@ -13,6 +13,8 @@ import {
   Upload,
   History,
   NotebookPen,
+  BookOpen,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +43,8 @@ type PageType =
   | "chat"
   | "compliance-check"
   | "contract-review"
+  | "policy-generator"
+  | "idea-analyzer"
   | "ai-agents"
   | "rulebase"
   | "upload-assets"
@@ -67,6 +71,17 @@ const navigationItems = [
     title: "Contract Review",
     icon: FileText,
     page: "/contract-review" as PageType,
+  },
+  {
+    title: "Policy Generator",
+    icon: BookOpen,
+    page: "/policy-generator" as PageType,
+  },
+  {
+    title: "Idea Analyzer",
+    icon: Lightbulb,
+    page: "/idea-analyzer" as PageType,
+    beta: true,
   },
   {
     title: "AI Agents",
@@ -126,11 +141,13 @@ export function AppSidebar() {
     href,
     icon: Icon,
     isActive,
+    beta,
   }: {
     title: string;
     href: string;
     icon: React.ComponentType<{ className?: string }>;
     isActive: boolean;
+    beta?: boolean;
   }) => {
     const buttonContent = (
       <div
@@ -151,6 +168,9 @@ export function AppSidebar() {
           }`}
         >
           {title}
+          {beta && !sidebarCollapsed && (
+            <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full border text-[10px] leading-none bg-yellow-50 border-yellow-200 text-yellow-700">Beta</span>
+          )}
         </span>
       </div>
     );
@@ -260,6 +280,7 @@ export function AppSidebar() {
                     href={item.page}
                     icon={item.icon}
                     isActive={currentPage === item.page}
+                    beta={(item as any).beta}
                   />
                 ))}
               </div>
