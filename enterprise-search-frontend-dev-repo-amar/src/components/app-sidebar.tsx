@@ -15,6 +15,7 @@ import {
   NotebookPen,
   BookOpen,
   Lightbulb,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +50,7 @@ type PageType =
   | "rulebase"
   | "upload-assets"
   | "history"
+  | "how-to-use"
   | "settings";
 
 const navigationItems = [
@@ -106,6 +108,11 @@ const navigationItems = [
 ];
 
 const bottomNavigationItems = [
+  {
+    title: "How to Use",
+    icon: HelpCircle,
+    page: "/how-to-use" as PageType,
+  },
   {
     title: "Settings",
     icon: Settings,

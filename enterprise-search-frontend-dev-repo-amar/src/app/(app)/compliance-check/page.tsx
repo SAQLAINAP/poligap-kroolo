@@ -802,7 +802,10 @@ export default function ComplianceCheckPage() {
   const canAnalyze = selectedStandards.length > 0 && uploadedFile !== null;
 
   return (
-    <div className="w-full mx-auto p-6 space-y-8">
+    <div className="w-full mx-auto p-6 space-y-8 relative">
+      <a href="/how-to-use#compliance-check" className="absolute top-2 right-4 text-xs text-[var(--url-color)] hover:underline">
+        How to Use
+      </a>
       <div className={`flex gap-6 ${selectedStandards.length > 0 ? 'max-w-none' : 'max-w-6xl mx-auto'}`}>
         {/* Main Content */}
         <div className={`${selectedStandards.length > 0 ? 'flex-1' : 'w-full'} space-y-8`}>
@@ -1116,7 +1119,7 @@ export default function ComplianceCheckPage() {
                             Analyzed against {result.standard} on {new Date(result.uploadDate).toLocaleDateString()}
                             {analysisMethod && (
                               <span className="text-xs ml-2">
-                                • Powered by {analysisMethod.includes('kroolo') ? 'Kroolo AI' : 'Gemini AI'}
+                                • Powered by {analysisMethod.includes('kroolo') ? 'Poligap AI' : 'Gemini AI'}
                               </span>
                             )}
                             {appliedRuleBase && (

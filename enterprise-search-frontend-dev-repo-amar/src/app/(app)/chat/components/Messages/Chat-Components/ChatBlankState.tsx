@@ -14,7 +14,16 @@ const ChatBlankState = ({ isGlobalAgent }: { isGlobalAgent: boolean }) => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}>
           <div className='flex flex-col items-center justify-center gap-1 gap-x-2 font-medium whitespace-nowrap'>
-            <Icon type='poligap' size='md' />
+            <div className='h-[72px] w-[72px] overflow-hidden flex items-center justify-center'>
+              <img
+                src={'/assets/poligap-high-resolution-logo.png'}
+                alt='Poligap AI'
+                width={72}
+                height={72}
+                className='object-contain'
+                style={{ transform: 'scale(1.2)', transformOrigin: 'center' }}
+              />
+            </div>
             <span className='mt-1 flex items-center text-sm font-[500] text-[var(--text-color)]'>
               {" "}
               {isGlobalAgent ? "Ask, write, or search for anything" : "Start Chat with AI Agent"}{" "}

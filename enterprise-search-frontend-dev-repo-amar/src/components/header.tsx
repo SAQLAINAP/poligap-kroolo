@@ -101,20 +101,18 @@ export function Header() {
     redirect("/auth/signin");
   };
 
-  const headerImageSrc = mounted
-    ? resolvedTheme === "light"
-      ? "/assets/icons/kroolo-dark-logo.svg"
-      : "/assets/icons/kroolo-light-logo.svg"
-    : "/assets/icons/kroolo-dark-logo.svg"; // or fallback to a neutral logo or loading placeholder
+  // Use Poligap PNG logo across themes
+  const headerImageSrc = "/assets/poligap-high-resolution-logo.png";
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-[60px] max-w-screen items-center justify-between px-6">
         {/* Logo Section */}
         <div className="flex items-center">
+          <img src={headerImageSrc} alt="Poligap" width={32} height={32} className="h-8 w-8 mr-2 object-contain" />
           <div className="flex flex-col justify-center">
             <h1 className="text-lg font-bold text-foreground leading-tight">Poligap</h1>
-            <span className="text-xs text-muted-foreground leading-tight">Powered by Kroolo</span>
+            <span className="text-xs text-muted-foreground leading-tight">Poligap AI</span>
           </div>
         </div>
 

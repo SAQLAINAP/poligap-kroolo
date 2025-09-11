@@ -85,8 +85,14 @@ const AgentChat = () => {
   return (
     <main className="flex h-full">
       <div className="flex-1 flex flex-col min-w-0 relative">
-        {(!recentChatsOpen || isMobile) && (
-          <div className="absolute top-4 right-4 z-30">
+        <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
+          <a
+            href="/how-to-use#chat"
+            className="text-xs text-[var(--url-color)] hover:underline whitespace-nowrap"
+          >
+            How to Use
+          </a>
+          {(!recentChatsOpen || isMobile) && (
             <Button
               variant="outline"
               size="sm"
@@ -95,8 +101,8 @@ const AgentChat = () => {
             >
               <RecentChatIcon />
             </Button>
-          </div>
-        )}
+          )}
+        </div>
         <ChatArea
           agent_id={agent_id}
           isTrained={isTrained}

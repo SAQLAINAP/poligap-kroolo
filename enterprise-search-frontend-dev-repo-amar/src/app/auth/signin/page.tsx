@@ -137,11 +137,7 @@ export default function SignInPage() {
     }
   };
 
-  const krooloLogoSrc = mounted
-    ? resolvedTheme === "light"
-      ? "/assets/icons/kroolo-dark-logo.svg"
-      : "/assets/icons/kroolo-light-logo.svg"
-    : "/assets/icons/kroolo-dark-logo.svg"; // or fallback to a neutral logo or loading placeholder
+  const krooloLogoSrc = "/assets/poligap-high-resolution-logo.png";
 
   return (
     <div className="min-h-screen flex">
@@ -151,7 +147,7 @@ export default function SignInPage() {
           {/* Logo and Header */}
           <div className="text-center space-y-6">
             <div className="flex items-center justify-center">
-              <Image src={krooloLogoSrc} alt="Logo" width={150} height={32} />
+              <Image src={krooloLogoSrc} alt="Poligap AI" width={150} height={32} />
             </div>
 
             <div className="space-y-2">
