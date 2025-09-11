@@ -16,16 +16,19 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import Image from "next/image";
-import { redirect } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { LogOut, User, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { useCompanyStore } from "@/stores/company-store";
 import { useUserProfileDetails } from "@/lib/queries/useUserProfileDetails";
 import { getInitials } from "@/utils/user.util";
+import { Input } from "@/components/ui/input";
 
 export function Header() {
+  const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [storedId, setStoredId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
   const { setUserData, clearUserData } = useUserStore();
   const { logout: authLogout } = useAuthStore();
   const { setCompanies, setSelectedCompany } = useCompanyStore();
@@ -106,7 +109,7 @@ export function Header() {
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-[60px] max-w-screen items-center justify-between px-6">
+      <div className="container grid grid-cols-[auto_1fr_auto] h-[60px] max-w-screen items-center px-6 gap-4">
         {/* Logo Section */}
         <div className="flex items-center">
           <img src={headerImageSrc} alt="Poligap" width={32} height={32} className="h-8 w-8 mr-2 object-contain" />
@@ -114,6 +117,27 @@ export function Header() {
             <h1 className="text-lg font-bold text-foreground leading-tight">Poligap</h1>
             <span className="text-xs text-muted-foreground leading-tight">Poligap AI</span>
           </div>
+        </div>
+
+        {/* Center Search */}
+        <div className="flex items-center justify-center">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = searchText.trim();
+              if (!q) return;
+              router.push(`/chat?q=${encodeURIComponent(q)}`);
+              setSearchText("");
+            }}
+            className="w-full max-w-xl"
+          >
+            <Input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search across Poligap • Press Enter to send to Chat"
+              className="w-full"
+            />
+          </form>
         </div>
 
         {/* Right Section - Theme Switcher and Profile */}

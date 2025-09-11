@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChatArea } from "./components";
 import type { SelectedLanguageType, MediaTypeProps } from "./types/agent";
 import RecentChats from "./recent-chats";
@@ -11,6 +12,7 @@ import { useUserStore } from "@/stores/user-store";
 
 const AgentChat = () => {
   const selectedCompany = useCompanyStore((s) => s.selectedCompany);
+  const searchParams = useSearchParams();
   const companyId = selectedCompany?.companyId;
   const { userData } = useUserStore();
   const userId = userData?.userId;
@@ -77,6 +79,15 @@ const AgentChat = () => {
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  // Prefill input from global header search (?q=...)
+  useEffect(() => {
+    const q = searchParams?.get("q");
+    if (q) {
+      setInputMessage(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const toggleRecentChats = () => {
     setRecentChatsOpen(!recentChatsOpen);
