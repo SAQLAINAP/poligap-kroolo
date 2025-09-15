@@ -4,14 +4,46 @@ import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { useUserStore } from "@/stores/user-store";
 import { useCompanyStore } from "@/stores/company-store";
 import { useIntegrationStore } from "@/stores/integration-store";
-import { useSuggestedItems, SuggestedItem } from "@/lib/queries/useSuggestedItems";
-import { useTrendingSearches } from "@/lib/queries/useTrendingSearches";
-import { useLatestDocuments } from "@/lib/queries/useLatestDocuments";
-import { getSourceIcon } from "@/utils/search.util";
+import { useAnalyticsUsage } from "@/lib/queries/analytics/useAnalyticsUsage";
+import { useSearchSeries } from "@/lib/queries/analytics/useSearchSeries";
+import { useTopSearches } from "@/lib/queries/analytics/useTopSearches";
+import { useComplianceSummary } from "@/lib/queries/analytics/useComplianceSummary";
+
+// Simple inline charts without extra deps
+function LineChart({ data, height = 120 }: { data: { date: string; count: number }[]; height?: number }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  const points = data.map((d, i) => {
+    const x = (i / Math.max(1, data.length - 1)) * 100;
+    const y = 100 - (d.count / max) * 100;
+    return `${x},${y}`;
+  });
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full" style={{ height }}>
+      <polyline points={points.join(" ")} fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500" />
+    </svg>
+  );
+}
+
+function BarList({ items, maxItems = 5 }: { items: { label: string; value: number }[]; maxItems?: number }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return (
+    <div className="space-y-3">
+      {items.slice(0, maxItems).map((i) => (
+        <div key={i.label} className="flex items-center gap-3">
+          <div className="flex-1 h-2 rounded bg-muted overflow-hidden">
+            <div className="h-full bg-blue-500" style={{ width: `${(i.value / max) * 100}%` }} />
+          </div>
+          <div className="w-10 text-right text-xs text-muted-foreground">{i.value}</div>
+          <div className="flex-1 text-sm truncate" title={i.label}>{i.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function HomeFeedPage() {
   const { userData } = useUserStore();
@@ -19,24 +51,13 @@ export default function HomeFeedPage() {
   const selectedCompany = useCompanyStore((s) => s.selectedCompany);
   const connectedAccountIds = useIntegrationStore((s) => s.connectedAccountIds);
 
-  const { data: suggestedItems = [], isLoading: isSuggestedLoading } = useSuggestedItems();
-  const { data: trendingSearches = [], isLoading: isTrendingLoading } = useTrendingSearches();
-  const { data: latestDocs = [], isLoading: isLatestLoading } = useLatestDocuments(10);
+  const userId = userData?._id;
+  const companyId = selectedCompany?.companyId;
 
-  const filteredSuggestedItems = useMemo(
-    () => suggestedItems.filter((i) => i.title && i.title.trim() !== ""),
-    [suggestedItems]
-  );
-
-  const shuffledTrending = useMemo(() => {
-    const filtered = (trendingSearches || []).filter((i: any) => i.title && i.title.trim() !== "");
-    const arr = [...filtered];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  }, [trendingSearches]);
+  const { data: usage, isLoading: usageLoading } = useAnalyticsUsage(userId, companyId);
+  const { data: series = [], isLoading: seriesLoading } = useSearchSeries(userId, companyId, 30);
+  const { data: topSearches = [], isLoading: topLoading } = useTopSearches(userId, companyId, 5);
+  const { data: compliance, isLoading: complianceLoading } = useComplianceSummary(userId, companyId, 5);
 
   return (
     <div className="max-w-6xl mx-auto px-4">
@@ -79,136 +100,103 @@ export default function HomeFeedPage() {
 
       <main className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8 text-[13px]">
         <div className="md:col-span-2 space-y-6">
-          {/* Latest Articles */}
-          <Card className="p-4">
-            <div className="flex justify-between items-center">
-              <CardTitle className="text-lg font-semibold">Latest articles</CardTitle>
-            </div>
-            <ScrollArea className="pr-3 max-h-[40vh]">
-              {isLatestLoading ? (
-                <div className="space-y-3">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="flex items-center py-3 px-2">
-                      <Skeleton className="w-5 h-5 mr-3 rounded" />
-                      <div className="flex-grow space-y-2">
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-3 w-1/2" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : latestDocs.length > 0 ? (
-                latestDocs.map((item, idx: number) => (
-                  <div key={item.id ?? idx} className="flex items-center py-3 px-2 hover:bg-muted dark:hover:bg-neutral-700 rounded-md cursor-default">
-                    <div className="mr-3 shrink-0">{getSourceIcon(item.integration_type ?? "", 20)}</div>
-                    <div className="flex-grow overflow-hidden">
-                      <p className="text-13 font-medium truncate" title={item.title}>
-                        {item.title}
-                      </p>
-                    </div>
-                  </div>
-                ))
+          {/* KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card className="p-4">
+              <CardTitle className="text-sm mb-2">Searches (MTD)</CardTitle>
+              {usageLoading ? <Skeleton className="h-8 w-24" /> : <div className="text-2xl font-semibold">{usage?.searchCountMonth ?? 0}</div>}
+            </Card>
+            <Card className="p-4">
+              <CardTitle className="text-sm mb-2">Audit Logs (MTD)</CardTitle>
+              {usageLoading ? <Skeleton className="h-8 w-24" /> : <div className="text-2xl font-semibold">{usage?.auditCountMonth ?? 0}</div>}
+            </Card>
+            <Card className="p-4">
+              <CardTitle className="text-sm mb-2">Flagged (all)</CardTitle>
+              {usageLoading ? (
+                <Skeleton className="h-8 w-24" />
               ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <p className="text-sm text-muted-foreground mb-1">No latest articles found</p>
-                  <p className="text-xs text-muted-foreground">Kroolo API returned no data. Configure Gemini to enable fallback content.</p>
+                <div className="space-x-3 text-sm">
+                  <span className="font-medium">New: {usage?.flagged?.new ?? 0}</span>
+                  <span className="font-medium">Resolved: {usage?.flagged?.resolved ?? 0}</span>
                 </div>
               )}
-            </ScrollArea>
+            </Card>
+          </div>
+
+          {/* Searches over time */}
+          <Card className="p-4">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg font-semibold">Searches last 30 days</CardTitle>
+            </div>
+            <div className="mt-2">
+              {seriesLoading ? (
+                <Skeleton className="h-[120px] w-full" />
+              ) : series.length > 0 ? (
+                <LineChart data={series} />
+              ) : (
+                <div className="text-sm text-muted-foreground py-6">No search activity found.</div>
+              )}
+            </div>
           </Card>
 
-          {/* Suggested */}
+          {/* Compliance summary */}
           <Card className="p-4">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-lg font-semibold">Suggested</CardTitle>
+              <CardTitle className="text-lg font-semibold">Compliance summary</CardTitle>
             </div>
-            <ScrollArea className="pr-3 max-h-[60vh]">
-              {isSuggestedLoading ? (
-                <div className="space-y-3">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="flex items-center py-3 px-2">
-                      <Skeleton className="w-5 h-5 mr-3 rounded" />
-                      <div className="flex-grow space-y-2">
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-3 w-1/2" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : filteredSuggestedItems.length > 0 ? (
-                filteredSuggestedItems.map((item: SuggestedItem, idx: number) => (
-                  <div key={idx} className="flex items-center py-3 px-2 hover:bg-muted dark:hover:bg-neutral-700 rounded-md cursor-default">
-                    <div className="mr-3 shrink-0">{getSourceIcon(item.integration_type, 20)}</div>
-                    <div className="flex-grow overflow-hidden">
-                      <p className="text-13 font-medium truncate" title={item.title}>
-                        {item.title}
-                      </p>
-                    </div>
-                  </div>
-                ))
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">Average score</div>
+                {complianceLoading ? <Skeleton className="h-8 w-24" /> : <div className="text-2xl font-semibold">{compliance?.averageScore != null ? Math.round(compliance.averageScore) : "—"}</div>}
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">Analyzed docs</div>
+                {complianceLoading ? <Skeleton className="h-8 w-24" /> : <div className="text-2xl font-semibold">{compliance?.totalAnalyzed ?? 0}</div>}
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">Top metric keys</div>
+                {complianceLoading ? (
+                  <Skeleton className="h-16 w-full" />
+                ) : (
+                  <ul className="text-sm list-disc pl-5 space-y-1">
+                    {(compliance?.topMetricKeys || []).map((m) => (
+                      <li key={m.key} className="truncate" title={`${m.key} (${m.count})`}>
+                        {m.key} <span className="text-muted-foreground">({m.count})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="mt-6">
+              <div className="text-sm font-medium mb-2">Top compliances</div>
+              {complianceLoading ? (
+                <Skeleton className="h-24 w-full" />
               ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <p className="text-sm text-muted-foreground mb-1">No suggestions yet</p>
-                  <p className="text-xs text-muted-foreground">Your personalized suggestions will appear here.</p>
-                </div>
+                <BarList items={(compliance?.topCompliances || []).map((c) => ({ label: c.name, value: c.count }))} />
               )}
-            </ScrollArea>
+            </div>
           </Card>
         </div>
 
+        {/* Right column: Top searches */}
         <div className="md:col-span-1">
-          <Card className="py-3">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg font-semibold flex items-center justify-between w-full">
-                <span>Trending</span>
-                <TrendingUp />
-              </CardTitle>
+          <Card className="p-4">
+            <CardHeader className="px-0 pt-0">
+              <CardTitle className="text-lg font-semibold">Top searches</CardTitle>
             </CardHeader>
-            <CardContent className="py-0 px-3">
-              <div className="mt-0 flex flex-col justify-center">
-                <ScrollArea className="pr-2 max-h-[60vh]">
-                  {isTrendingLoading ? (
-                    <div className="space-y-3">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="flex items-start py-2.5 px-1">
-                          <Skeleton className="w-8 h-8 mr-2 rounded" />
-                          <div className="flex-grow space-y-2">
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-3 w-1/2" />
-                          </div>
-                          <Skeleton className="w-6 h-4 ml-2" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : shuffledTrending.length > 0 ? (
-                    shuffledTrending.map((item: any) => (
-                      <div key={item.id} className="flex items-center py-2.5 px-1 hover:bg-muted dark:hover:bg-neutral-700 rounded-md cursor-default">
-                        <div className="flex items-center flex-grow">
-                          <div className="mr-2 shrink-0 flex items-center justify-center">
-                            {getSourceIcon(item.integration_type, 20)}
-                          </div>
-                          <div className="flex-grow flex items-center">
-                            <p className="text-13 font-medium" title={item.title}>
-                              {item.title}
-                            </p>
-                          </div>
-                        </div>
-                        {item.trending_context?.search_count !== undefined && (
-                          <span className="mr-2 text-xs text-muted-foreground flex items-center">
-                            {item.trending_context.search_count}
-                          </span>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <TrendingUp className="w-12 h-12 text-muted-foreground mb-3" />
-                      <p className="text-sm text-muted-foreground mb-1">No trending items</p>
-                      <p className="text-xs text-muted-foreground">Popular searches will appear here.</p>
-                    </div>
-                  )}
-                </ScrollArea>
-              </div>
+            <CardContent className="px-0">
+              {topLoading ? (
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-5 w-full" />
+                  ))}
+                </div>
+              ) : topSearches.length > 0 ? (
+                <BarList items={topSearches.map((t) => ({ label: t.title, value: t.count }))} />
+              ) : (
+                <div className="text-sm text-muted-foreground">No top searches to show.</div>
+              )}
             </CardContent>
           </Card>
         </div>

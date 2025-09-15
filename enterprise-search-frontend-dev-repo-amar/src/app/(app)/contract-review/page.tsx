@@ -323,6 +323,11 @@ export default function ContractReview() {
   const [extractedDocument, setExtractedDocument] = useState<ExtractedDocument | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [editedText, setEditedText] = useState("");
+  // Editor modes for extracted text panel
+  const [editorMode, setEditorMode] = useState<'highlight' | 'edit' | 'diff'>("highlight");
+  // Model tabs to view inline diffs against generated drafts
+  const [selectedModelId, setSelectedModelId] = useState<string>("extracted");
+  const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [reviews, setReviews] = useState<ContractReview[]>(initialReviews);
@@ -355,6 +360,86 @@ export default function ContractReview() {
     if (!el) return;
     const amount = el.clientWidth * 0.8;
     el.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
+  };
+
+  // Compute inline diff HTML between original extracted text and editedText
+  const inlineDiffHtml = (original: string, revised: string) => {
+    const esc = (s: string) => s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    // Tokenize by words with whitespace preserved
+    const origTokens = original.split(/(\s+)/);
+    const revTokens = revised.split(/(\s+)/);
+    // LCS dynamic programming
+    const m = origTokens.length, n = revTokens.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        dp[i][j] = origTokens[i] === revTokens[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    // Backtrack to produce diff spans
+    let i = 0, j = 0;
+    const out: string[] = [];
+    while (i < m && j < n) {
+      if (origTokens[i] === revTokens[j]) {
+        out.push(esc(origTokens[i]));
+        i++; j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        // deletion
+        const chunk = esc(origTokens[i]);
+        if (chunk.trim()) out.push(`<span class="bg-red-200/70 dark:bg-red-800/70 line-through">${chunk}</span>`); else out.push(chunk);
+        i++;
+      } else {
+        // insertion
+        const chunk = esc(revTokens[j]);
+        if (chunk.trim()) out.push(`<span class="bg-emerald-200/70 dark:bg-emerald-800/70">${chunk}</span>`); else out.push(chunk);
+        j++;
+      }
+    }
+    while (i < m) {
+      const chunk = esc(origTokens[i++]);
+      if (chunk.trim()) out.push(`<span class="bg-red-200/70 dark:bg-red-800/70 line-through">${chunk}</span>`); else out.push(chunk);
+    }
+    while (j < n) {
+      const chunk = esc(revTokens[j++]);
+      if (chunk.trim()) out.push(`<span class="bg-emerald-200/70 dark:bg-emerald-800/70">${chunk}</span>`); else out.push(chunk);
+    }
+    return out.join("");
+  };
+
+  // Generate simple drafts for each model by applying gap suggestions differently
+  const generateModelDrafts = () => {
+    if (!extractedDocument) return;
+    const base = extractedDocument.fullText;
+    const gaps = extractedDocument.gaps || [];
+
+    const applyGaps = (predicate: (g: DocumentGap) => boolean) => {
+      let out = base;
+      const applicable = gaps
+        .filter(predicate)
+        .filter((g) => g.suggestedText)
+        .sort((a, b) => (b.startIndex ?? 0) - (a.startIndex ?? 0));
+      for (const g of applicable) {
+        if ((g.startIndex ?? -1) >= 0 && (g.endIndex ?? -1) >= (g.startIndex ?? 0)) {
+          out = out.slice(0, g.startIndex) + (g.suggestedText || "") + out.slice(g.endIndex);
+        } else if (g.suggestedText) {
+          out = out + (out.endsWith("\n") ? "\n\n" : "\n\n") + g.suggestedText;
+        }
+      }
+      return out;
+    };
+
+    const drafts: Record<string, string> = {
+      extracted: base,
+      chatgpt: applyGaps(() => true),
+      claude: applyGaps((g) => g.severity === "critical" || g.gapType === "missing"),
+      grok: applyGaps((g) => g.gapType !== "missing"),
+    };
+
+    setModelDrafts(drafts);
+    setEditorMode("diff");
   };
 
   // New: custom template upload handler for Knowledge Base Templates mode
@@ -1458,13 +1543,124 @@ The parties agree to the terms herein.`;
                 <div className="grid md:grid-cols-2 gap-8">
                   <Card className="overflow-hidden">
                     <CardHeader>
-                      <CardTitle className="text-lg font-bold">Extracted Text (Highlighted)</CardTitle>
+                      <div className="flex items-center justify-between gap-3">
+                        <CardTitle className="text-lg font-bold">Extracted Text</CardTitle>
+                        <div className="flex items-center gap-2">
+                          <div className="inline-flex rounded-md border border-[var(--card-border-color)] p-0.5">
+                            <button
+                              onClick={() => setEditorMode('highlight')}
+                              className={`cursor-pointer px-2 py-1 text-xs rounded ${editorMode === 'highlight' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60'}`}
+                            >
+                              Highlight
+                            </button>
+                            <button
+                              onClick={() => setEditorMode('edit')}
+                              className={`cursor-pointer px-2 py-1 text-xs rounded ${editorMode === 'edit' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60'}`}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setEditorMode('diff')}
+                              className={`cursor-pointer px-2 py-1 text-xs rounded ${editorMode === 'diff' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60'}`}
+                            >
+                              Diff
+                            </button>
+                          </div>
+                          <div className="hidden md:flex items-center gap-2">
+                            <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+                              <SelectTrigger className="h-8 w-[180px]">
+                                <SelectValue placeholder="Model" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="extracted">Extracted Text</SelectItem>
+                                <SelectItem value="chatgpt">ChatGPT</SelectItem>
+                                <SelectItem value="claude">Claude</SelectItem>
+                                <SelectItem value="grok">Grok</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" variant="outline" className="cursor-pointer" onClick={generateModelDrafts}>
+                              Generate Drafts
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent>
-                      <div
-                        className="prose dark:prose-invert max-w-none border rounded-md p-4"
-                        dangerouslySetInnerHTML={{ __html: highlightGaps(extractedDocument?.fullText ?? "", extractedDocument?.gaps ?? []) }}
-                      />
+                      {/* When drafts are present, show model tabs and inline diff for the selected model */}
+                      {Object.keys(modelDrafts).length > 0 && (
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1">
+                            {(["extracted","chatgpt","claude","grok"] as const).map((id) => (
+                              <button
+                                key={id}
+                                onClick={() => setSelectedModelId(id)}
+                                className={`cursor-pointer px-2 py-1 text-xs rounded border ${selectedModelId===id? 'bg-muted text-foreground border-[var(--card-border-color)]' : 'text-muted-foreground hover:bg-muted/60 border-transparent'}`}
+                              >
+                                {id === 'extracted' ? 'Extracted Text' : id.charAt(0).toUpperCase()+id.slice(1)}
+                              </button>
+                            ))}
+                            <div className="ml-auto">
+                              <Button size="sm" variant="secondary" className="cursor-pointer" onClick={() => setEditedText(modelDrafts[selectedModelId] || extractedDocument?.fullText || '')}>
+                                Apply to Editor
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs text-muted-foreground">Inline diff • <span className="bg-emerald-200/70 px-1 rounded">Added</span> <span className="bg-red-200/70 line-through px-1 rounded">Removed</span></div>
+                          <div
+                            className="min-h-[220px] whitespace-pre-wrap font-mono text-sm border rounded-md p-4"
+                            dangerouslySetInnerHTML={{ __html: inlineDiffHtml(extractedDocument?.fullText ?? '', modelDrafts[selectedModelId] ?? '') }}
+                          />
+                        </div>
+                      )}
+
+                      {editorMode === 'highlight' && (
+                        <div
+                          className="prose dark:prose-invert max-w-none border rounded-md p-4"
+                          dangerouslySetInnerHTML={{ __html: highlightGaps(extractedDocument?.fullText ?? '', extractedDocument?.gaps ?? []) }}
+                        />
+                      )}
+
+                      {editorMode === 'edit' && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-muted-foreground">Canvas editor • Click and type to edit</div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="cursor-pointer"
+                                onClick={() => setEditedText(extractedDocument?.fullText ?? '')}
+                              >
+                                Reset to Original
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="cursor-pointer"
+                                onClick={() => navigator.clipboard.writeText(editedText)}
+                              >
+                                Copy
+                              </Button>
+                            </div>
+                          </div>
+                          <textarea
+                            value={editedText}
+                            onChange={(e) => setEditedText(e.target.value)}
+                            className="min-h-[300px] w-full whitespace-pre-wrap font-mono text-sm border rounded-md p-4 outline-none focus:ring-2 focus:ring-ring bg-background resize-none"
+                            placeholder="Click here to edit the extracted text..."
+                          />
+                        </div>
+                      )}
+
+                      {editorMode === 'diff' && (
+                        <div className="space-y-2">
+                          <div className="text-xs text-muted-foreground">Inline diff • <span className="bg-emerald-200/70 px-1 rounded">Added</span> <span className="bg-red-200/70 line-through px-1 rounded">Removed</span></div>
+                          <div
+                            className="min-h-[300px] whitespace-pre-wrap font-mono text-sm border rounded-md p-4"
+                            dangerouslySetInnerHTML={{ __html: inlineDiffHtml(extractedDocument?.fullText ?? '', editedText) }}
+                          />
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -1515,6 +1711,34 @@ The parties agree to the terms herein.`;
                     </CardContent>
                   </Card>
                 </div>
+              )}
+
+              {/* Missing Clauses quick list */}
+              {extractedDocument && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-bold">Missing Clauses</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {extractedDocument.gaps.filter(g => g.gapType === 'missing').length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No missing clauses detected.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {extractedDocument.gaps.filter(g => g.gapType === 'missing').map(g => (
+                          <div key={g.id} className="flex items-start justify-between gap-3 border rounded-md p-3">
+                            <div>
+                              <div className="text-sm font-medium">{g.sectionTitle}</div>
+                              <div className="text-xs text-muted-foreground">{g.description}</div>
+                            </div>
+                            {g.suggestedText && (
+                              <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => applyGapSuggestion(g)}>Insert</Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
             </div>
           )}
