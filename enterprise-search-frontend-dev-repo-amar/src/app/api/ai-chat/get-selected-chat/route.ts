@@ -8,17 +8,18 @@ export async function GET(request: NextRequest) {
   try {
     const conversationId = request.nextUrl.searchParams.get("conversationId");
 
-    if (!conversationId) {
+    if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
       return createApiResponse({
         success: false,
-        error: "Missing conversationId",
+        error: "Invalid or missing conversationId",
         status: 400,
       });
     }
 
     console.log("conversationId 🫱", conversationId);
+    const convObjectId = new mongoose.Types.ObjectId(conversationId);
     const conversation = await AgentConversation.findOne({
-      _id: mongoose.Types.ObjectId.createFromHexString(conversationId),
+      _id: convObjectId,
       status: "active",
     });
 
@@ -31,8 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     const chats = await AgentConversationChat.find({
-      conversationId:
-        mongoose.Types.ObjectId.createFromHexString(conversationId),
+      conversationId: convObjectId,
     }).sort({
       createdAt: 1,
     });

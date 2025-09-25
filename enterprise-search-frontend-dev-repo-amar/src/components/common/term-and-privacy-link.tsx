@@ -6,7 +6,7 @@ import React from "react";
 const TermsAndPrivacyLinks: React.FC = () => {
   return (
     <p className="mt-2 text-xs text-center text-gray-500">
-      By signing up, You agree to Kroolo&apos;s{" "}
+      By signing up, You agree to Poligap AI&apos;s{" "}
       <Link
         href={`https://kroolo.com/legal/terms-of-use`}
         target="_blank"

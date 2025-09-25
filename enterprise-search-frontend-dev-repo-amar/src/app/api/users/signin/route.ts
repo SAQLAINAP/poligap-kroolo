@@ -19,16 +19,35 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const response = await fetch(
-      `${process.env.BACKEND_URL}/api/v1/users/signin`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+    // Resolve backend base URL from environment
+    const baseUrl =
+      process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "";
+
+    if (!baseUrl) {
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            status: "ERROR",
+            data: null,
+            message:
+              "BACKEND_URL is not set. Please configure BACKEND_URL (or NEXT_PUBLIC_BACKEND_URL) in your .env.local file.",
+          },
         },
-        body: JSON.stringify(body),
-      }
-    );
+        { status: 200 }
+      );
+    }
+
+    // Build a safe absolute URL regardless of trailing slashes
+    const signinUrl = new URL("/api/v1/users/signin", baseUrl).toString();
+
+    const response = await fetch(signinUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       // Try to extract error message from backend, else use a default message

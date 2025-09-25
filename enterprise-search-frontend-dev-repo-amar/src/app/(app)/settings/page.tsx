@@ -383,18 +383,18 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key className="h-5 w-5" />
-                Kroolo Integration
+                Poligap Integration
               </CardTitle>
               <CardDescription>
-                Manage integration with Kroolo platform and external services
+                Manage integration with Poligap platform and external services
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Kroolo Sync</Label>
+                  <Label>Poligap Sync</Label>
                   <p className="text-sm text-muted-foreground">
-                    Sync data with your Kroolo workspace
+                    Sync data with your Poligap workspace
                   </p>
                 </div>
                 <Switch

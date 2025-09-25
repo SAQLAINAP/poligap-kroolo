@@ -21,6 +21,30 @@ import useChatActions from "./useChatActions";
 import { toastError } from "@/components/toast-varients";
 import { useCompanyStore } from "@/stores/company-store";
 
+// Extract @mentions like @contract_2023 from user input
+function parseAssetMentions(text: string): string[] {
+  if (!text) return [];
+  const mentions = new Set<string>();
+  const regex = /@([A-Za-z0-9_\-\.]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    mentions.add(m[0]);
+  }
+  return Array.from(mentions);
+}
+
+// Build a compact context preface from resolved assets
+function buildAssetContextBlock(assets: any[]): string {
+  if (!Array.isArray(assets) || assets.length === 0) return "";
+  const blocks = assets.map((a) => {
+    const title = a?.originalName || a?.filename || a?.url || "asset";
+    const src = a?.url ? ` (source: ${a.url})` : "";
+    const snippet = (a?.snippet || "").slice(0, 1200);
+    return `- ${title}${src}\n  ${snippet}`;
+  });
+  return `Use the following asset context when answering. Only rely on this content for facts. If a question is about these assets, cite them by name.\n${blocks.join("\n")}`;
+}
+
 const useAIChatStreamHandler = ({
   agent_id,
   agno_id,
@@ -237,6 +261,36 @@ const useAIChatStreamHandler = ({
 
       if (typeof input === "string") {
         requestData.user_query = input;
+        // Resolve @asset mentions and inject context
+        const mentions = parseAssetMentions(input);
+        if (mentions.length > 0) {
+          try {
+            const res = await fetch("/api/assets/resolve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mentions }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const resolvedAssets = Array.isArray(data?.assets) ? data.assets : [];
+              if (resolvedAssets.length > 0) {
+                const contextBlock = buildAssetContextBlock(resolvedAssets);
+                const original = requestData.user_query;
+                requestData.user_query = `${contextBlock}\n\nUser Query: ${original}`;
+                // Attach metadata for backend/tooling use
+                (requestData as any).asset_mentions = mentions;
+                (requestData as any).asset_context = resolvedAssets.map((a: any) => ({
+                  id: a._id,
+                  name: a.originalName || a.filename,
+                  url: a.url,
+                }));
+              }
+            }
+          } catch (e) {
+            // Non-fatal; continue without asset context
+            console.warn("Asset resolve failed", e);
+          }
+        }
       }
       if (medias.length > 0) {
         requestData.file_names = medias

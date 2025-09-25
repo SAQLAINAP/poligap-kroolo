@@ -27,6 +27,23 @@ export const AgnoIcon: FC = ({ ...props }) => {
   );
 };
 
+// Simple Poligap AI monogram logo (circle with P)
+export const PoligapIcon: FC = ({ ...props }) => {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <circle cx="10" cy="10" r="9" fill="#6D28D9"/>
+      <path d="M7 5.5h4.2c2.05 0 3.3 1.2 3.3 3 0 1.8-1.25 3-3.3 3H9.1v3H7V5.5zm4.03 4.2c.84 0 1.33-.45 1.33-1.2 0-.75-.49-1.2-1.33-1.2H9.1v2.4h1.93z" fill="#FFFFFF"/>
+    </svg>
+  );
+};
+
 export const UserIcon: FC = ({ ...props }) => {
   return (
     <svg

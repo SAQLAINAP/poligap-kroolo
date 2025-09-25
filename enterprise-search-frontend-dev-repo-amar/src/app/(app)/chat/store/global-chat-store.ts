@@ -366,7 +366,7 @@ export const useGlobalChatStore = create((set: any) => ({
       // );
 
       const res = await fetch(
-        `/api/ai-chat/delete-conversation?conversationId=${requestData}`,
+        `/api/ai-chat/delete-conversation?conversationId=${requestData?.conversationId}`,
         {
           method: "DELETE",
         }
@@ -500,7 +500,7 @@ export const useGlobalChatStore = create((set: any) => ({
       // );
 
       const res = await fetch(
-        `/api/ai-chat/get-selected-chat?conversationId=${requestData}`,
+        `/api/ai-chat/get-selected-chat?conversationId=${requestData?.conversationId}`,
         {
           method: "GET",
         }
@@ -532,7 +532,10 @@ export const useGlobalChatStore = create((set: any) => ({
       useGlobalChatStore.setState({ isCreatingConversation: false });
     }
   },
-  generateConversationTitle: async (msg: string): Promise<void> => {
+  generateConversationTitle: async (
+    msg: string,
+    conversationIdOverride?: string
+  ): Promise<void> => {
     try {
       console.log("generateConversationTitle msg:", msg);
       const requestData = {
@@ -551,20 +554,21 @@ export const useGlobalChatStore = create((set: any) => ({
       console.log("generateConversationTitle response:", resp);
 
       if (resp?.success) {
-        const selectedConversation = (useGlobalChatStore.getState() as any)
-          .selectedConversation;
+        const storeState = useGlobalChatStore.getState() as any;
+        const selectedConversation = storeState.selectedConversation;
+        const conversationId = conversationIdOverride || selectedConversation?._id;
         console.log("selectedConversation for edit:", selectedConversation);
 
-        if (selectedConversation?._id) {
-          (useGlobalChatStore.getState() as any).editConversationAPI(
+        if (conversationId) {
+          storeState.editConversationAPI(
             {
               chatName: resp.data,
-              conversationId: selectedConversation._id,
+              conversationId,
             },
             true
           );
         } else {
-          console.error("No selectedConversation._id found");
+          console.error("No conversationId found for title update");
           toastWarning("Title Generation Failed", "No conversation selected");
         }
       } else {

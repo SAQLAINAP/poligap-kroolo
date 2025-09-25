@@ -146,125 +146,72 @@ ${bodyLatex}
       console.error('[export-pdf] node-latex failed:', latexErr);
     }
 
-    // 2) Fallback: md-to-pdf first (ensures proper Markdown formatting), then fallback to md2pdf
-    const baseCss = `
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-      body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #111827; }
-      h1 { font-size: 24px; font-weight: 700; margin: 16px 0 8px; }
-      h2 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
-      h3 { font-size: 16px; font-weight: 700; margin: 16px 0 8px; }
-      p { margin: 8px 0; }
-      ul, ol { padding-left: 20px; margin: 8px 0; }
-      code { background: #f4f4f5; padding: 2px 5px; border-radius: 4px; }
-      pre { background: #f4f4f5; padding: 10px; border-radius: 6px; overflow-x: auto; }
-      a { color: #2563eb; text-decoration: none; }
-      img { max-width: 100%; }
-    `;
+    // 2) Fallback: Try global CLI 'md-to-pdf', then final fallback with @react-pdf/renderer
     try {
-      const { mdToPdf } = await import("md-to-pdf");
-      const result = await mdToPdf(
-        { content: combined },
-        { css: baseCss, marked_options: { breaks: true } as any }
-      );
-      if (!result.content) throw new Error("No PDF content from md-to-pdf");
-      return new NextResponse(result.content, {
+      const os = await import('node:os');
+      const path = await import('node:path');
+      const fs = await import('node:fs/promises');
+      const { spawn } = await import('node:child_process');
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdtopdf-'));
+      const mdPath = path.join(tmpDir, `${fileName}.md`);
+      const pdfPath = path.join(tmpDir, `${fileName}.pdf`);
+      await fs.writeFile(mdPath, combined, 'utf8');
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn('md-to-pdf', ['--output', pdfPath, mdPath], { shell: true });
+        let stderr = '';
+        proc.stderr.on('data', (d) => { stderr += d.toString(); });
+        proc.on('error', reject);
+        proc.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`md-to-pdf CLI exit ${code}: ${stderr}`));
+        });
+      });
+
+      const buffer = await fs.readFile(pdfPath);
+      return new NextResponse(buffer, {
         status: 200,
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `attachment; filename=${fileName}.pdf`,
+          "X-Export-Fallback": "md-to-pdf-cli",
         },
       });
-    } catch (errMdTo) {
-      console.error("[export-pdf] md-to-pdf failed:", errMdTo);
+    } catch (cliErr) {
+      console.error('[export-pdf] md-to-pdf CLI failed:', cliErr);
+      // Final fallback: generate a simple PDF with @react-pdf/renderer so the user still gets a file
       try {
-        const mod: any = (await import("md2pdf")).default ?? (await import("md2pdf"));
-        let buffer: Buffer | undefined;
-        try {
-          buffer = await mod(combined, { asBuffer: true });
-        } catch (inner) {
-          buffer = await mod({ content: combined }, { asBuffer: true });
-        }
-        if (!buffer) throw new Error("No PDF content from md2pdf");
+        const React = (await import("react")).default;
+        const pdfMod: any = await import("@react-pdf/renderer");
+        const { Document, Page, View, Text, Image, StyleSheet } = pdfMod;
+        const styles = StyleSheet.create({
+          page: { padding: 32 },
+          logoWrap: { alignItems: 'center', marginBottom: 16 },
+          logo: { height: 80, width: 180, objectFit: 'contain' },
+          content: { fontSize: 12, lineHeight: 1.4, whiteSpace: 'pre-wrap' },
+        });
+        const FallbackDoc = (
+          React.createElement(Document, null,
+            React.createElement(Page, { size: 'A4', style: styles.page },
+              logo ? React.createElement(View, { style: styles.logoWrap },
+                React.createElement(Image, { style: styles.logo, src: logo as string })
+              ) : null,
+              React.createElement(Text, { style: styles.content }, combined)
+            )
+          )
+        );
+        const inst = pdfMod.pdf(FallbackDoc);
+        const buffer = await inst.toBuffer();
         return new NextResponse(buffer, {
           status: 200,
           headers: {
             "Content-Type": "application/pdf",
             "Content-Disposition": `attachment; filename=${fileName}.pdf`,
+            "X-Export-Fallback": "react-pdf",
           },
         });
-      } catch (errMd2) {
-        console.error("[export-pdf] md2pdf failed:", errMd2);
-        // Try global CLI 'md-to-pdf' as a final markdown-aware fallback before react-pdf
-        try {
-          const os = await import('node:os');
-          const path = await import('node:path');
-          const fs = await import('node:fs/promises');
-          const { spawn } = await import('node:child_process');
-          const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdtopdf-'));
-          const mdPath = path.join(tmpDir, `${fileName}.md`);
-          const pdfPath = path.join(tmpDir, `${fileName}.pdf`);
-          await fs.writeFile(mdPath, combined, 'utf8');
-
-          await new Promise<void>((resolve, reject) => {
-            const proc = spawn('md-to-pdf', ['--output', pdfPath, mdPath], { shell: true });
-            let stderr = '';
-            proc.stderr.on('data', (d) => { stderr += d.toString(); });
-            proc.on('error', reject);
-            proc.on('close', (code) => {
-              if (code === 0) resolve();
-              else reject(new Error(`md-to-pdf CLI exit ${code}: ${stderr}`));
-            });
-          });
-
-          const buffer = await fs.readFile(pdfPath);
-          return new NextResponse(buffer, {
-            status: 200,
-            headers: {
-              "Content-Type": "application/pdf",
-              "Content-Disposition": `attachment; filename=${fileName}.pdf`,
-              "X-Export-Fallback": "md-to-pdf-cli",
-            },
-          });
-        } catch (cliErr) {
-          console.error('[export-pdf] md-to-pdf CLI failed:', cliErr);
-        // Final fallback: generate a simple PDF with @react-pdf/renderer so the user still gets a file
-        try {
-          const React = (await import("react")).default;
-          const pdfMod: any = await import("@react-pdf/renderer");
-          const { Document, Page, View, Text, Image, StyleSheet } = pdfMod;
-          const styles = StyleSheet.create({
-            page: { padding: 32 },
-            logoWrap: { alignItems: 'center', marginBottom: 16 },
-            logo: { height: 80, width: 180, objectFit: 'contain' },
-            content: { fontSize: 12, lineHeight: 1.4, whiteSpace: 'pre-wrap' },
-          });
-          const FallbackDoc = (
-            React.createElement(Document, null,
-              React.createElement(Page, { size: 'A4', style: styles.page },
-                logo ? React.createElement(View, { style: styles.logoWrap },
-                  React.createElement(Image, { style: styles.logo, src: logo as string })
-                ) : null,
-                React.createElement(Text, { style: styles.content }, combined)
-              )
-            )
-          );
-          const inst = pdfMod.pdf(FallbackDoc);
-          const buffer = await inst.toBuffer();
-          return new NextResponse(buffer, {
-            status: 200,
-            headers: {
-              "Content-Type": "application/pdf",
-              "Content-Disposition": `attachment; filename=${fileName}.pdf`,
-              "X-Export-Fallback": "react-pdf",
-            },
-          });
-        } catch (fallbackErr) {
-          const msg1 = (errMdTo as Error)?.message || String(errMdTo);
-          const msg2 = (errMd2 as Error)?.message || String(errMd2);
-          const msg3 = (fallbackErr as Error)?.message || String(fallbackErr);
-          return NextResponse.json({ error: "PDF export failed", mdToPdfError: msg1, md2pdfError: msg2, fallbackError: msg3 }, { status: 500 });
-        }
-        }
+      } catch (fallbackErr) {
+        return NextResponse.json({ error: "PDF export failed" }, { status: 500 });
       }
     }
   } catch (e) {

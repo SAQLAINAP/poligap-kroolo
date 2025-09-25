@@ -58,8 +58,8 @@ const Inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Kroolo | Enterprise Search",
-  description: "Kroolo Enterprise Search",
+  title: "Poligap AI",
+  description: "Poligap AI",
 };
 
 export default function RootLayout({
@@ -68,7 +68,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={Inter.variable}>
+    <html lang="en" suppressHydrationWarning className={`${Inter.variable} h-full`}>
       <head>
         <link
           rel="icon"
@@ -77,7 +77,7 @@ export default function RootLayout({
           sizes="32x32"
         />
       </head>
-      <body className={`${Inter.className} antialiased`} suppressHydrationWarning>
+      <body className={`${Inter.className} antialiased h-screen overflow-hidden`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

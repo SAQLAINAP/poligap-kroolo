@@ -338,17 +338,15 @@ export default function SearchInput({
             onClick={() => {
               setQuery("");
               setShowSuggestions(false);
-              // Navigate back to search landing page
-              router.push("/search");
+              // Navigate back to home page
+              router.push("/home");
               inputRef.current?.focus();
             }}
           >
             <X className="w-4 h-4" />
           </Button>
         )}
-      </div>
-
-      {showSuggestions && (
+        {showSuggestions && (
         <Card
           className="absolute z-10 w-full bg-card shadow-lg rounded-b-md rounded-t-none border border-input border-t-0 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring py-0"
           ref={suggestionsRef}
@@ -553,7 +551,8 @@ export default function SearchInput({
             )}
           </CardContent>
         </Card>
-      )}
+        )}
+      </div>
     </div>
   );
 }

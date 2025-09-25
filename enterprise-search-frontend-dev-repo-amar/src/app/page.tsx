@@ -60,31 +60,49 @@ export default function Home() {
       }
 
       try {
-        // Fetch user details
-        const memberRes = await fetch("/api/users/get-member", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, companyId: selectedCompany.companyId }),
-        });
+        // Fetch member details (non-fatal)
+        let member: any = null;
+        try {
+          const memberRes = await fetch("/api/users/get-member", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, companyId: selectedCompany.companyId }),
+          });
+          if (memberRes.ok) {
+            const json = await memberRes.json();
+            member = json?.member ?? null;
+          } else {
+            console.warn("/api/users/get-member returned", memberRes.status);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch member", e);
+        }
 
-        // --- fetch member info ---
-        if (!memberRes.ok) throw new Error("Failed to fetch member");
-        const { member } = await memberRes.json();
+        // Fetch user details (non-fatal)
+        let user: any = null;
+        try {
+          const userRes = await fetch("/api/users/get-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId }),
+          });
+          if (userRes.ok) {
+            const json = await userRes.json();
+            user = json?.user ?? null;
+          } else {
+            console.warn("/api/users/get-user returned", userRes.status);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch user", e);
+        }
 
-        const userRes = await fetch("/api/users/get-user", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
-        });
-        if (!userRes.ok) throw new Error("Failed to fetch user");
-        const { user } = await userRes.json();
         const fastApiPayload = {
           user_id: userId,
           company_id: selectedCompany.companyId,
-          email: user?.email ,
+          email: user?.email,
           mobile: user?.mobile || "0000000000",
           name: user?.name,
-          designation: user?.designation ,
+          designation: user?.designation,
           role: member?.role,
           status: member?.status,
         };
@@ -106,9 +124,11 @@ export default function Home() {
         // const data = await response.json();
         // console.log("FastAPI Response:", data);
 
-        router.push("/search");
+        router.push("/home");
       } catch (error) {
         console.error("Error building/sending payload:", error);
+        // Non-fatal: still proceed to home to avoid blocking startup
+        router.push("/home");
       }
     }
 

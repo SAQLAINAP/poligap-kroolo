@@ -16,7 +16,7 @@ const AgentMessageWrapper = ({
 }: MessageWrapperProps) => {
   return (
     <div className="flex flex-col">
-      <div className="sticky top-0 z-10 bg-[var(--modal-color)] bg-opacity-80 backdrop-blur-md px-3 pt-2">
+      <div className="sticky top-0 z-10 bg-[var(--modal-color)] border-b border-[var(--card-border-color)] px-3 pt-2">
         <UserMessage message={message} />
       </div>
       <AgentMessage

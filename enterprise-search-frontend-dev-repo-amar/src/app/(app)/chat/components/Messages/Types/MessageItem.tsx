@@ -21,7 +21,7 @@ const AgentMessage = ({
   const { streamingErrorMessage, isStreaming } = useAgentStore();
   const [activeTab, setActiveTab] = useState<TabType>("content");
 
-  const tabs: TabData[] = [{ id: "content", label: "Kroolo", icon: "kroolo" }];
+  const tabs: TabData[] = [{ id: "content", label: "Poligap AI", icon: "poligap" }];
 
   if (
     message.extra_data?.references &&
@@ -183,7 +183,7 @@ const AgentMessage = ({
               >
                 <Icon
                   type={
-                    tab.label === "Kroolo" && isStreaming === message.id
+                    tab.label === "Poligap AI" && isStreaming === message.id
                       ? "loading-icon"
                       : tab.icon
                   }

@@ -46,7 +46,7 @@ export type IconType =
   | "trash"
   | "image"
   | "video"
-  | "kroolo"
+  | "poligap"
   | "audio"
   | "anthropic_icon"
   | "gpt_icon"

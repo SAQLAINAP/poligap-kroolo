@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChatArea } from "./components";
 import type { SelectedLanguageType, MediaTypeProps } from "./types/agent";
 import RecentChats from "./recent-chats";
@@ -11,6 +12,7 @@ import { useUserStore } from "@/stores/user-store";
 
 const AgentChat = () => {
   const selectedCompany = useCompanyStore((s) => s.selectedCompany);
+  const searchParams = useSearchParams();
   const companyId = selectedCompany?.companyId;
   const { userData } = useUserStore();
   const userId = userData?.userId;
@@ -78,6 +80,15 @@ const AgentChat = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  // Prefill input from global header search (?q=...)
+  useEffect(() => {
+    const q = searchParams?.get("q");
+    if (q) {
+      setInputMessage(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const toggleRecentChats = () => {
     setRecentChatsOpen(!recentChatsOpen);
   };
@@ -85,8 +96,14 @@ const AgentChat = () => {
   return (
     <main className="flex h-full">
       <div className="flex-1 flex flex-col min-w-0 relative">
-        {(!recentChatsOpen || isMobile) && (
-          <div className="absolute top-4 right-4 z-30">
+        <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
+          <a
+            href="/how-to-use#chat"
+            className="text-xs text-[var(--url-color)] hover:underline whitespace-nowrap"
+          >
+            How to Use
+          </a>
+          {(!recentChatsOpen || isMobile) && (
             <Button
               variant="outline"
               size="sm"
@@ -95,8 +112,8 @@ const AgentChat = () => {
             >
               <RecentChatIcon />
             </Button>
-          </div>
-        )}
+          )}
+        </div>
         <ChatArea
           agent_id={agent_id}
           isTrained={isTrained}

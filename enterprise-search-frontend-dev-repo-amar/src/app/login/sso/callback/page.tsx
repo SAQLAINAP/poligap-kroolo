@@ -1,5 +1,8 @@
 "use client";
 
+// This page relies on client-side auth and environment values; avoid static prerendering
+export const dynamic = "force-dynamic";
+
 import React, { useEffect } from "react";
 import { useAuthInfo } from "@propelauth/react";
 import { jwtDecode } from "jwt-decode";
@@ -63,14 +66,18 @@ export default function SsoCallbackPage() {
       const decoded: DecodedToken = jwtDecode(authInfo.accessToken);
 
       if (decoded?.login_method?.login_method === "saml_sso") {
-        const url = new URL(
-          `https://${process.env.NEXT_PUBLIC_AWS_COGNITO_DOMAIN}/oauth2/authorize`
-        );
+        const domain = process.env.NEXT_PUBLIC_AWS_COGNITO_DOMAIN;
+        const clientId = process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_WEB_CLIENT_ID;
+        // Guard against missing envs to prevent Invalid URL during build/prerender
+        if (!domain || !clientId) {
+          console.error("Missing Cognito env config: NEXT_PUBLIC_AWS_COGNITO_DOMAIN or NEXT_PUBLIC_AWS_COGNITO_USER_POOL_WEB_CLIENT_ID");
+          router.push("/auth/signin");
+          return;
+        }
 
-        url.searchParams.set(
-          "client_id",
-          process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_WEB_CLIENT_ID ?? ""
-        );
+        const url = new URL(`https://${domain}/oauth2/authorize`);
+
+        url.searchParams.set("client_id", clientId);
         url.searchParams.set("response_type", "code");
         url.searchParams.set(
           "scope",
