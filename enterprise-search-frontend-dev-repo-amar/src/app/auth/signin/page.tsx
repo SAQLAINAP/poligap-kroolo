@@ -258,9 +258,7 @@ export default function SignInPage() {
             <div className="mt-4 text-center text-xs text-gray-500">
               {"Don't have an account? "}
               <Link
-                href="https://app.kroolo.com/signup"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/auth/signup"
                 className="text-base-purple hover:text-base-purple-hover font-medium"
               >
                 Sign up

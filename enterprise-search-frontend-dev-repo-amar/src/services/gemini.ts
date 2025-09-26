@@ -24,6 +24,29 @@ class GeminiService {
     templateClauses: TemplateClause[],
     contractType: string
   ): Promise<ContractAnalysisResult> {
+    // First try server-side route to avoid exposing keys client-side
+    try {
+      const serverResp = await fetch('/api/contract-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: contractText, templateClauses, contractType })
+      });
+      if (serverResp.ok) {
+        const json = await serverResp.json();
+        return {
+          suggestions: json.suggestions || [],
+          overallScore: json.overallScore ?? 0.7,
+          riskAssessment: json.riskAssessment || { level: 'medium', factors: [] },
+          missingClauses: json.missingClauses || [],
+          complianceIssues: json.complianceIssues || [],
+        };
+      }
+      // If server route fails, fall through to client direct call
+      console.warn('Server /api/contract-analyze failed, falling back to direct Gemini:', await serverResp.text());
+    } catch (err) {
+      console.warn('Failed calling /api/contract-analyze, falling back to direct Gemini', err);
+    }
+
     if (!this.apiKey) {
       throw new Error('Gemini API key not configured');
     }

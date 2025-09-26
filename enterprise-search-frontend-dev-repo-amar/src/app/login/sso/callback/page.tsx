@@ -4,30 +4,16 @@
 export const dynamic = "force-dynamic";
 
 import React, { useEffect } from "react";
-import { useAuthInfo } from "@propelauth/react";
-import { jwtDecode } from "jwt-decode";
 import { useRouter } from "next/navigation";
 import useAuthenticationStore from "@/stores/authentication";
 import { handleCognitoLogin } from "./actions";
 
-interface loginMethod {
-  login_method: string;
-}
-interface DecodedToken {
-  login_method?: loginMethod;
-}
-
 export default function SsoCallbackPage() {
-  const authInfo = useAuthInfo();
   const router = useRouter();
 
   useEffect(() => {
-    if (authInfo?.loading) return;
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-
-    // console.log("AUthInfo>>>>>>>>>>>>", authInfo);
-    // console.log("code>>>>>>>>>", code);
 
     if (code) {
       // 👉 User is coming back from Cognito with ?code
@@ -62,41 +48,12 @@ export default function SsoCallbackPage() {
       };
 
       callBackendCallback();
-    } else if (authInfo?.accessToken) {
-      const decoded: DecodedToken = jwtDecode(authInfo.accessToken);
-
-      if (decoded?.login_method?.login_method === "saml_sso") {
-        const domain = process.env.NEXT_PUBLIC_AWS_COGNITO_DOMAIN;
-        const clientId = process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_WEB_CLIENT_ID;
-        // Guard against missing envs to prevent Invalid URL during build/prerender
-        if (!domain || !clientId) {
-          console.error("Missing Cognito env config: NEXT_PUBLIC_AWS_COGNITO_DOMAIN or NEXT_PUBLIC_AWS_COGNITO_USER_POOL_WEB_CLIENT_ID");
-          router.push("/auth/signin");
-          return;
-        }
-
-        const url = new URL(`https://${domain}/oauth2/authorize`);
-
-        url.searchParams.set("client_id", clientId);
-        url.searchParams.set("response_type", "code");
-        url.searchParams.set(
-          "scope",
-          "email openid profile aws.cognito.signin.user.admin"
-        );
-        url.searchParams.set("identity_provider", "PropelAuth");
-        url.searchParams.set("state", "1234567890");
-        url.searchParams.set(
-          "redirect_uri",
-          `${window.location.origin}/login/sso/callback`
-        );
-
-        window.location.href = url.toString();
-      } else {
-        // If login method is unexpected, redirect to dashboard or show error
-        router.push("/auth/signin");
-      }
     }
-  }, [authInfo, router]);
+    // If no code param, go back to signin
+    else {
+      router.push("/auth/signin");
+    }
+  }, [router]);
 
   return (
     <div className="flex items-center justify-center h-screen">

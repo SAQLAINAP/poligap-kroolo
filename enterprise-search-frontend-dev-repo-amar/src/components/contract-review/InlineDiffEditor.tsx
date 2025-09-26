@@ -21,7 +21,7 @@ import {
   CheckCheck,
   Loader2
 } from 'lucide-react';
-import { useContractReviewStore, DiffSuggestion } from '@/store/contractReview';
+import { useContractReviewStore, AISuggestion } from '@/store/contractReview';
 import { geminiService } from '@/services/gemini';
 
 interface InlineDiffEditorProps {
@@ -112,8 +112,8 @@ export const InlineDiffEditor: React.FC<InlineDiffEditorProps> = ({ className = 
         type: s.type
       })));
       
-      // Convert AISuggestion to DiffSuggestion format
-      const diffSuggestions: DiffSuggestion[] = analysisResult.suggestions.map(suggestion => ({
+      // Normalize suggestions to store's AISuggestion type
+      const diffSuggestions: AISuggestion[] = analysisResult.suggestions.map(suggestion => ({
         id: suggestion.id,
         type: suggestion.type,
         severity: suggestion.severity,

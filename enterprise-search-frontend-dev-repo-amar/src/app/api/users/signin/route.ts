@@ -1,5 +1,7 @@
-// import { createApiResponse } from "@/lib/apiResponse";
 import { NextRequest, NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/mongodb";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 /**
  * Request body interface for user signin
@@ -17,76 +19,64 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const { email, password } = await req.json();
 
-    // Resolve backend base URL from environment
-    const baseUrl =
-      process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "";
-
-    if (!baseUrl) {
+    if (!email || !password) {
       return NextResponse.json(
         {
           success: true,
-          data: {
-            status: "ERROR",
-            data: null,
-            message:
-              "BACKEND_URL is not set. Please configure BACKEND_URL (or NEXT_PUBLIC_BACKEND_URL) in your .env.local file.",
-          },
+          data: { status: "ERROR", data: null, message: "Email and password are required" },
         },
         { status: 200 }
       );
     }
 
-    // Build a safe absolute URL regardless of trailing slashes
-    const signinUrl = new URL("/api/v1/users/signin", baseUrl).toString();
+    const { db } = await connectToDatabase();
+    const users = db.collection("users");
 
-    const response = await fetch(signinUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+    const user = await users.findOne({ email: String(email).toLowerCase() });
+    if (!user || !user.passwordHash) {
+      return NextResponse.json(
+        { success: true, data: { status: "ERROR", data: null, message: "Incorrect username or password." } },
+        { status: 200 }
+      );
+    }
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) {
+      return NextResponse.json(
+        { success: true, data: { status: "ERROR", data: null, message: "Incorrect username or password." } },
+        { status: 200 }
+      );
+    }
+
+    const secret = process.env.JWT_SECRET || "dev-secret";
+    const token = jwt.sign({ sub: String(user._id), email: user.email }, secret, {
+      expiresIn: "7d",
     });
 
-    if (!response.ok) {
-      // Try to extract error message from backend, else use a default message
-      let errorMessage = "Incorrect username or password.";
-      try {
-        const errorData = await response.json();
-        if (errorData?.message) {
-          errorMessage = errorData.message;
-        }
-      } catch (e) {
-        // ignore JSON parse errors, use default message
-      }
-      return NextResponse.json(
-        {
-          success: true,
-          data: {
-            status: "ERROR",
-            data: null,
-            message: errorMessage,
-          },
-        },
-        { status: 200 }
-      );
-    }
-
-    const data = await response.json();
-    const token = data.token;
     const res = NextResponse.json({
       success: true,
-      data,
+      data: {
+        status: "SUCCESS",
+        data: {
+          userToken: { AccessToken: token },
+          userData: {
+            userId: String(user._id),
+            email: user.email,
+            name: user.name || "",
+          },
+        },
+        message: "Signed in successfully",
+      },
     });
 
-    // Set the cookie
     res.cookies.set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return res;

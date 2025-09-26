@@ -46,25 +46,12 @@ export async function extractTextFromPdf(file: File): Promise<string> {
       }
     }
     
-    // If no text found, return a sample contract for demo purposes
-    return `SERVICE AGREEMENT
-
-This Service Agreement ("Agreement") is entered into on [DATE] between [COMPANY NAME], a [STATE] corporation ("Company") and [SERVICE PROVIDER NAME] ("Provider").
-
-SCOPE OF SERVICES:
-Provider will deliver consulting services as needed.
-
-PAYMENT TERMS:
-Payment due within 30 days.
-
-TERMINATION:
-Either party may terminate with notice.
-
-The parties agree to the terms herein.`;
+    // If no text found, fail explicitly to avoid pseudo data
+    throw new Error('No readable text could be extracted from the PDF. Please upload a text-based PDF or provide a DOCX/TXT.');
     
   } catch (error) {
     console.error('PDF extraction error:', error);
-    throw new Error('Failed to extract text from PDF. Please ensure the file is a valid PDF document.');
+    throw new Error(error instanceof Error ? error.message : 'Failed to extract text from PDF. Please ensure the file is a valid PDF document.');
   }
 }
 
